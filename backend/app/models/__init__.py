@@ -1,0 +1,320 @@
+from datetime import date, datetime, timezone
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.db import Base
+
+
+def now():
+    return datetime.now(timezone.utc)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(Text)
+    full_name: Mapped[str] = mapped_column(String(200))
+    birth_date: Mapped[date] = mapped_column(Date)
+    consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    consent_version: Mapped[str] = mapped_column(String(30), default="2026-01")
+    guardian_name: Mapped[str | None] = mapped_column(String(200))
+    guardian_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    roles: Mapped[list["Role"]] = relationship(secondary="user_roles", lazy="selectin")
+
+
+class Role(Base):
+    __tablename__ = "roles"
+    id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    role_id: Mapped[str] = mapped_column(ForeignKey("roles.id"), primary_key=True)
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    kind: Mapped[str] = mapped_column(String(80), default="Клуб")
+    municipality: Mapped[str] = mapped_column(String(120))
+
+
+class Discipline(Base):
+    __tablename__ = "disciplines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True)
+    short_name: Mapped[str] = mapped_column(String(60))
+
+
+class Athlete(Base):
+    __tablename__ = "athletes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
+    municipality: Mapped[str] = mapped_column(String(120), default="Оренбург")
+    training_stage: Mapped[str | None] = mapped_column(String(120))
+    rusada_date: Mapped[date | None] = mapped_column(Date)
+    rusada_certificate: Mapped[str | None] = mapped_column(Text)
+    suspended_until: Mapped[date | None] = mapped_column(Date)
+    suspension_reason: Mapped[str | None] = mapped_column(Text)
+    user: Mapped[User] = relationship(lazy="joined")
+
+
+class AthleteDiscipline(Base):
+    __tablename__ = "athlete_disciplines"
+    __table_args__ = (CheckConstraint("end_year IS NULL OR end_year >= start_year"),)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), primary_key=True)
+    discipline_id: Mapped[int] = mapped_column(
+        ForeignKey("disciplines.id"), primary_key=True
+    )
+    start_year: Mapped[int] = mapped_column(Integer)
+    end_year: Mapped[int | None] = mapped_column(Integer)
+
+
+class Coach(Base):
+    __tablename__ = "coaches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
+    user: Mapped[User] = relationship(lazy="joined")
+
+
+class Judge(Base):
+    __tablename__ = "judges"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    user: Mapped[User] = relationship(lazy="joined")
+
+
+class AthleteCoach(Base):
+    __tablename__ = "athlete_coaches"
+    __table_args__ = (
+        UniqueConstraint("athlete_id", "coach_id", "discipline_id"),
+        CheckConstraint("status IN ('pending','active','paused','ended')"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    coach_id: Mapped[int] = mapped_column(ForeignKey("coaches.id"))
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class LinkHistory(Base):
+    __tablename__ = "link_history"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    link_id: Mapped[int] = mapped_column(ForeignKey("athlete_coaches.id"))
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class CompetitionType(Base):
+    __tablename__ = "competition_types"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+
+
+class Competition(Base):
+    __tablename__ = "competitions"
+    __table_args__ = (
+        CheckConstraint("end_date >= start_date"),
+        CheckConstraint("min_age <= max_age"),
+        CheckConstraint("state IN ('draft','open','closed','published')"),
+        CheckConstraint(
+            "level IN ('regional','interregional','russian_championship','russian_junior')"
+        ),
+        CheckConstraint("format IN ('onsite','online','hybrid')"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(240))
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
+    type_id: Mapped[int] = mapped_column(ForeignKey("competition_types.id"))
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date] = mapped_column(Date)
+    deadline: Mapped[date] = mapped_column(Date)
+    location: Mapped[str] = mapped_column(String(200))
+    format: Mapped[str] = mapped_column(String(20))
+    level: Mapped[str] = mapped_column(String(40))
+    min_age: Mapped[int] = mapped_column(Integer, default=0)
+    max_age: Mapped[int] = mapped_column(Integer, default=100)
+    calendar_plan: Mapped[str] = mapped_column(String(100))
+    calendar_number: Mapped[str] = mapped_column(String(80))
+    regulation_url: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(20), default="draft")
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CompetitionApplication(Base):
+    __tablename__ = "competition_applications"
+    __table_args__ = (
+        UniqueConstraint("competition_id", "athlete_id"),
+        CheckConstraint("status IN ('pending','approved','rejected')"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"))
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    comment: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class CompetitionJudge(Base):
+    __tablename__ = "competition_judges"
+    competition_id: Mapped[int] = mapped_column(
+        ForeignKey("competitions.id"), primary_key=True
+    )
+    judge_id: Mapped[int] = mapped_column(ForeignKey("judges.id"), primary_key=True)
+    position: Mapped[str] = mapped_column(String(120))
+
+
+class CompetitionResult(Base):
+    __tablename__ = "competition_results"
+    __table_args__ = (
+        UniqueConstraint("competition_id", "athlete_id"),
+        UniqueConstraint("competition_id", "place"),
+        CheckConstraint("place > 0"),
+        CheckConstraint("score >= 0"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"))
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    place: Mapped[int] = mapped_column(Integer)
+    score: Mapped[float] = mapped_column(Float)
+
+
+class SportsRank(Base):
+    __tablename__ = "sports_ranks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
+    name: Mapped[str] = mapped_column(String(100))
+    assigned_on: Mapped[date] = mapped_column(Date)
+    expires_on: Mapped[date] = mapped_column(Date)
+    order_number: Mapped[str] = mapped_column(String(120))
+    result_id: Mapped[int] = mapped_column(ForeignKey("competition_results.id"))
+
+
+class JudgeCategory(Base):
+    __tablename__ = "judge_categories"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    judge_id: Mapped[int] = mapped_column(ForeignKey("judges.id"))
+    name: Mapped[str] = mapped_column(String(100))
+    assigned_on: Mapped[date] = mapped_column(Date)
+    expires_on: Mapped[date] = mapped_column(Date)
+    order_number: Mapped[str] = mapped_column(String(120))
+
+
+class RankApplication(Base):
+    __tablename__ = "rank_applications"
+    __table_args__ = (
+        CheckConstraint(
+            "(athlete_id IS NOT NULL AND judge_id IS NULL AND result_id IS NOT NULL) OR (judge_id IS NOT NULL AND athlete_id IS NULL AND result_id IS NULL)"
+        ),
+        CheckConstraint("status IN ('pending','approved','rejected')"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int | None] = mapped_column(ForeignKey("athletes.id"))
+    judge_id: Mapped[int | None] = mapped_column(ForeignKey("judges.id"))
+    result_id: Mapped[int | None] = mapped_column(ForeignKey("competition_results.id"))
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(30), default="assignment")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    comment: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class RatingRule(Base):
+    __tablename__ = "rating_rules"
+    level: Mapped[str] = mapped_column(String(40), primary_key=True)
+    first: Mapped[int] = mapped_column(Integer)
+    second: Mapped[int] = mapped_column(Integer)
+    third: Mapped[int] = mapped_column(Integer)
+
+
+class Rating(Base):
+    __tablename__ = "ratings"
+    __table_args__ = (UniqueConstraint("athlete_id", "discipline_id", "season"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
+    season: Mapped[int] = mapped_column(Integer)
+    points: Mapped[float] = mapped_column(Float)
+    coefficient: Mapped[float] = mapped_column(Float)
+    breakdown: Mapped[list] = mapped_column(JSON)
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+    season: Mapped[int] = mapped_column(Integer, primary_key=True)
+    discipline_id: Mapped[int] = mapped_column(
+        ForeignKey("disciplines.id"), primary_key=True
+    )
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), primary_key=True)
+    selected_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class EvskRule(Base):
+    __tablename__ = "evsk_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
+    level: Mapped[str] = mapped_column(String(40))
+    rank_name: Mapped[str] = mapped_column(String(100))
+    max_place: Mapped[int] = mapped_column(Integer)
+    min_participants: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(Text)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("user_id", "event_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    body: Mapped[str] = mapped_column(Text)
+    event_key: Mapped[str] = mapped_column(String(240))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    active_role: Mapped[str] = mapped_column(String(20))
+    action: Mapped[str] = mapped_column(String(120))
+    entity: Mapped[str] = mapped_column(String(100))
+    entity_id: Mapped[str] = mapped_column(String(100))
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Deadline(Base):
+    __tablename__ = "deadlines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(240))
+    due_on: Mapped[date] = mapped_column(Date)
+    done: Mapped[bool] = mapped_column(Boolean, default=False)

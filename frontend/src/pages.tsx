@@ -1,0 +1,926 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Bell,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Clock3,
+  Code2,
+  FileCheck2,
+  Plus,
+  ShieldCheck,
+  Trophy,
+  Users,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { useAction, useAuth, useData } from "./state";
+import { date, formats, roleNames, today } from "./lib";
+import { Button } from "./components/ui/button";
+import { Dialog } from "./components/ui/dialog";
+import {
+  Badge,
+  Empty,
+  ExportButtons,
+  Field,
+  PageTitle,
+  SearchBox,
+  Stat,
+  State,
+  Table,
+} from "./components/shared";
+export function Overview() {
+  const { user, role } = useAuth();
+  const stats = useData("/dashboard");
+  const comps = useData("/competitions");
+  const deadlines = useData("/deadlines");
+  const pop = useData(
+    "/reports/population?start_year=" +
+      (new Date().getFullYear() - 3) +
+      "&end_year=" +
+      new Date().getFullYear(),
+    role === "admin",
+  );
+  const upcoming = (comps.data || [])
+    .filter((c: any) => c.start_date >= today() && c.state !== "published")
+    .sort((a: any, b: any) => a.start_date.localeCompare(b.start_date))
+    .slice(0, 3);
+  const s = stats.data;
+  return (
+    <>
+      <PageTitle
+        eyebrow={`${roleNames[role].toUpperCase()} / ЛИЧНЫЙ КАБИНЕТ`}
+        title="Всё начинается с кода"
+        description={`Здравствуйте, ${user.full_name.replace("Демо · ", "").split(" ")[0]}. Вот что происходит в вашем спортивном сезоне.`}
+      >
+        <Link className="btn btn-outline" to="/competitions">
+          <CalendarDays size={16} />
+          Календарь соревнований
+        </Link>
+      </PageTitle>
+      <div className="season-banner">
+        <div className="banner-copy">
+          <span className="season-pill">
+            <i /> СЕЗОН {new Date().getFullYear()} ОТКРЫТ
+          </span>
+          <h2>
+            Одна платформа.
+            <br />
+            Больше возможностей.
+          </h2>
+          <p>
+            От первой заявки до сборной региона.
+            <br />
+            Управляйте своим спортивным будущим.
+          </p>
+          <Link to="/competitions">
+            Найти соревнование <ArrowUpRight size={17} />
+          </Link>
+        </div>
+        <div className="banner-art" aria-hidden="true">
+          <div className="code-orbit orbit-one" />
+          <div className="code-orbit orbit-two" />
+          <span className="giant-code">&lt;/&gt;</span>
+          <span className="art-label">CODE. COMPETE. GROW.</span>
+        </div>
+        <div className="banner-index">
+          06{" "}
+          <span>
+            дисциплин.
+            <br />
+            одна команда.
+          </span>
+        </div>
+      </div>
+      <State query={stats}>
+        <div className="stats-grid">
+          <Stat
+            label={
+              role === "coach"
+                ? "Мои спортсмены"
+                : role === "athlete"
+                  ? "Мой профиль"
+                  : role === "judge"
+                    ? "Мои назначения"
+                    : "Спортсмены"
+            }
+            value={role === "judge" ? s?.assignments : s?.athletes}
+            icon={Users}
+            note={
+              role === "admin"
+                ? "в едином реестре"
+                : "в пределах вашего кабинета"
+            }
+          />
+          <Stat
+            label="Соревнования"
+            value={s?.competitions}
+            icon={CalendarDays}
+            note="в календаре федерации"
+          />
+          <Stat
+            label="Заявки на рассмотрении"
+            value={s?.applications}
+            icon={FileCheck2}
+            note="требуют внимания"
+          />
+          <Stat
+            label={
+              role === "judge" ? "Действующие категории" : "Действующие разряды"
+            }
+            value={role === "judge" ? s?.categories : s?.ranks}
+            icon={Trophy}
+            note="по данным реестра"
+          />
+        </div>
+      </State>
+      <div className="dashboard-columns">
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Ближайшие соревнования</h2>
+              <p>Новые возможности для ваших побед</p>
+            </div>
+            <Link to="/competitions" className="text-link">
+              Все <ArrowRight size={16} />
+            </Link>
+          </div>
+          <State query={comps}>
+            {upcoming.length ? (
+              upcoming.map((c: any) => (
+                <Link
+                  className="upcoming-row"
+                  key={c.id}
+                  to={"/competitions/" + c.id}
+                >
+                  <div className="date-tile">
+                    <strong>{new Date(c.start_date).getDate()}</strong>
+                    <span>
+                      {new Date(c.start_date).toLocaleDateString("ru-RU", {
+                        month: "short",
+                      })}
+                    </span>
+                  </div>
+                  <div className="upcoming-copy">
+                    <small>{c.discipline}</small>
+                    <h3>{c.title.replace("Демо · ", "")}</h3>
+                    <p>
+                      {c.location} <i /> {formats[c.format]}
+                    </p>
+                  </div>
+                  <ChevronRight size={18} />
+                </Link>
+              ))
+            ) : (
+              <Empty text="Ближайшие события пока не запланированы" />
+            )}
+          </State>
+        </section>
+        <section className="panel attention-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>
+                <Clock3 size={18} /> Не пропустите
+              </h2>
+              <p>Сроки в вашем кабинете</p>
+            </div>
+            <span className="count-label">{deadlines.data?.length || 0}</span>
+          </div>
+          <State query={deadlines}>
+            {deadlines.data?.length ? (
+              deadlines.data.slice(0, 4).map((d: any, i: number) => (
+                <div className="deadline-row" key={d.kind + ":" + d.id}>
+                  <span
+                    className={"deadline-dot " + (i === 0 ? "urgent" : "")}
+                  />
+                  <div>
+                    <h3>{d.title.replace("Демо · ", "")}</h3>
+                    <p>{date(d.due_on)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <Empty
+                text="Нет ближайших сроков"
+                hint="Уведомим, когда появится важное событие."
+              />
+            )}
+          </State>
+        </section>
+      </div>
+      {role === "admin" ? (
+        <section className="panel growth-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Сообщество растёт</h2>
+              <p>
+                Численность занимающихся · по годам начала и окончания занятий
+              </p>
+            </div>
+            <Link to="/reports" className="text-link">
+              Аналитика <ArrowRight size={16} />
+            </Link>
+          </div>
+          <State query={pop}>
+            <div className="growth-content">
+              <div>
+                <span className="eyebrow">СПОРТСМЕНЫ РЕГИОНА</span>
+                <strong>{pop.data?.totals?.at(-1)?.count || 0}</strong>
+                <p>
+                  уникальных спортсменов
+                  <br />в текущем году
+                </p>
+              </div>
+              <div className="chart">
+                <ResponsiveContainer width="100%" height={170}>
+                  <AreaChart
+                    data={pop.data?.totals || []}
+                    margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="redArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0%"
+                          stopColor="#bd2d3c"
+                          stopOpacity={0.2}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#bd2d3c"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="4 5"
+                      vertical={false}
+                      stroke="#e9ebef"
+                    />
+                    <XAxis dataKey="year" tickLine={false} axisLine={false} />
+                    <YAxis
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip />
+                    <Area
+                      dataKey="count"
+                      name="Спортсменов"
+                      stroke="#bb2e40"
+                      strokeWidth={3}
+                      fill="url(#redArea)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </State>
+        </section>
+      ) : (
+        <section className="panel quick-links">
+          <div>
+            <ShieldCheck size={28} />
+            <h2>Следующий шаг в вашем сезоне</h2>
+            <p>Проверьте профиль, результаты и сроки действия квалификации.</p>
+          </div>
+          <Link
+            className="btn btn-outline"
+            to={
+              role === "judge"
+                ? "/assignments"
+                : role === "coach"
+                  ? "/coaching"
+                  : "/profile"
+            }
+          >
+            Открыть кабинет <ArrowRight size={16} />
+          </Link>
+        </section>
+      )}
+    </>
+  );
+}
+
+export function History() {
+  const q = useData("/results");
+  const a = useData("/athletes?mine=true");
+  const [search, setSearch] = useState("");
+  return (
+    <>
+      <PageTitle
+        title="История выступлений"
+        description="Результаты опубликованных протоколов в одном месте."
+      />
+      <section className="panel">
+        <div className="toolbar">
+          <SearchBox value={search} onChange={setSearch} />
+        </div>
+        <State query={q}>
+          {q.data?.length ? (
+            <Table
+              heads={[
+                "Спортсмен / соревнование",
+                "Дата",
+                "Место",
+                "Баллы",
+                "Протокол",
+              ]}
+            >
+              {q.data
+                .filter((r: any) =>
+                  (r.full_name + r.title)
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
+                )
+                .map((r: any) => (
+                  <tr key={r.id}>
+                    <td>
+                      <strong>{r.full_name}</strong>
+                      <small>{r.title}</small>
+                    </td>
+                    <td>{date(r.start_date)}</td>
+                    <td>
+                      <span className={r.place <= 3 ? "place-medal" : "place"}>
+                        {r.place}
+                      </span>
+                    </td>
+                    <td>{r.score}</td>
+                    <td>
+                      <ExportButtons
+                        base={"/exports/protocol/" + r.competition_id}
+                        name={"protocol-" + r.competition_id}
+                      />
+                    </td>
+                  </tr>
+                ))}
+            </Table>
+          ) : (
+            <Empty
+              text="Выступлений пока нет"
+              hint="Результаты появятся после публикации протокола."
+            />
+          )}
+        </State>
+      </section>
+      <section className="panel section-gap">
+        <div className="panel-heading">
+          <h2>Отчёт о выступлениях спортсмена</h2>
+        </div>
+        {a.data?.map((x: any) => (
+          <div className="simple-row" key={x.id}>
+            <span>{x.full_name}</span>
+            <ExportButtons
+              base={"/exports/athlete/" + x.id}
+              name={"athlete-" + x.id}
+            />
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
+export function ProfileEditor({ athlete, onSaved }: any) {
+  const meta = useData("/metadata");
+  const action = useAction();
+  const [v, setV] = useState<any>({
+    full_name: athlete.full_name,
+    organization_id: athlete.organization_id,
+    municipality: athlete.municipality,
+    training_stage: athlete.training_stage || "",
+    rusada_date: athlete.rusada_date || null,
+    rusada_certificate: athlete.rusada_certificate || null,
+    disciplines: athlete.disciplines || [],
+  });
+  const change = (k: string, val: any) => setV({ ...v, [k]: val });
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        try {
+          await action.mutateAsync({
+            method: "put",
+            url: "/athletes/" + athlete.id,
+            data: {
+              ...v,
+              disciplines: v.disciplines.map(
+                ({ discipline_id, start_year, end_year }: any) => ({
+                  discipline_id,
+                  start_year,
+                  end_year: end_year ?? null,
+                }),
+              ),
+              rusada_certificate: v.rusada_certificate || null,
+              rusada_date: v.rusada_date || null,
+              training_stage: v.training_stage || null,
+            },
+          });
+          onSaved?.();
+        } catch {}
+      }}
+    >
+      <Field label="ФИО">
+        <input
+          required
+          minLength={3}
+          value={v.full_name}
+          onChange={(e) => change("full_name", e.target.value)}
+        />
+      </Field>
+      <div className="form-grid">
+        <Field label="Муниципалитет">
+          <input
+            required
+            value={v.municipality}
+            onChange={(e) => change("municipality", e.target.value)}
+          />
+        </Field>
+        <Field label="Организация">
+          <select
+            value={v.organization_id || ""}
+            onChange={(e) =>
+              change("organization_id", e.target.value ? +e.target.value : null)
+            }
+          >
+            <option value="">Без организации</option>
+            {meta.data?.organizations.map((o: any) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <Field label="Этап подготовки">
+        <input
+          value={v.training_stage}
+          onChange={(e) => change("training_stage", e.target.value)}
+        />
+      </Field>
+      <div className="form-section">
+        <h3>Дисциплины и годы занятий</h3>
+        {meta.data?.disciplines.map((d: any) => {
+          const entry = v.disciplines.find(
+            (x: any) => x.discipline_id === d.id,
+          );
+          return (
+            <div key={d.id} className="enrollment-row">
+              <label className="check-line">
+                <input
+                  type="checkbox"
+                  checked={!!entry}
+                  onChange={(e) =>
+                    change(
+                      "disciplines",
+                      e.target.checked
+                        ? [
+                            ...v.disciplines,
+                            {
+                              discipline_id: d.id,
+                              start_year: new Date().getFullYear(),
+                              end_year: null,
+                            },
+                          ]
+                        : v.disciplines.filter(
+                            (x: any) => x.discipline_id !== d.id,
+                          ),
+                    )
+                  }
+                />
+                {d.short_name}
+              </label>
+              {entry && (
+                <>
+                  <input
+                    aria-label={"Год начала: " + d.short_name}
+                    type="number"
+                    min="1970"
+                    max={new Date().getFullYear()}
+                    value={entry.start_year}
+                    onChange={(e) =>
+                      change(
+                        "disciplines",
+                        v.disciplines.map((x: any) =>
+                          x === entry
+                            ? { ...x, start_year: +e.target.value }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    aria-label={"Год окончания: " + d.short_name}
+                    type="number"
+                    placeholder="Занимается"
+                    value={entry.end_year || ""}
+                    min={entry.start_year}
+                    onChange={(e) =>
+                      change(
+                        "disciplines",
+                        v.disciplines.map((x: any) =>
+                          x === entry
+                            ? {
+                                ...x,
+                                end_year: e.target.value
+                                  ? +e.target.value
+                                  : null,
+                              }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="form-grid">
+        <Field label="Дата прохождения РУСАДА">
+          <input
+            type="date"
+            value={v.rusada_date || ""}
+            onChange={(e) => change("rusada_date", e.target.value)}
+          />
+        </Field>
+        <Field label="Ссылка на сертификат">
+          <input
+            type="url"
+            placeholder="https://…"
+            value={v.rusada_certificate || ""}
+            onChange={(e) => change("rusada_certificate", e.target.value)}
+          />
+        </Field>
+      </div>
+      <div className="form-footer">
+        <Button disabled={action.isPending}>Сохранить профиль</Button>
+      </div>
+    </form>
+  );
+}
+export function Profile() {
+  const { user } = useAuth();
+  const q = useData("/athletes/" + user.athlete_id);
+  return (
+    <>
+      <PageTitle
+        title="Мой профиль"
+        description="Спортивная информация, дисциплины и документы."
+      />
+      <div className="profile-layout">
+        <section className="panel form-panel">
+          <State query={q}>
+            {q.data && <ProfileEditor key={q.data.id} athlete={q.data} />}
+          </State>
+        </section>
+        <aside>
+          <section className="panel info-card">
+            <ShieldCheck className="text-primary" />
+            <h2>Согласия и документы</h2>
+            <p>
+              Согласие на обработку персональных данных сохранено{" "}
+              {date(user.consent_at)}.
+            </p>
+            <small>Версия {user.consent_version}</small>
+            {user.guardian_name && (
+              <p>
+                Представитель: {user.guardian_name}. Согласие:{" "}
+                {date(user.guardian_consent_at)}.
+              </p>
+            )}
+          </section>
+          <section className="panel info-card section-gap">
+            <h2>Чистый спорт</h2>
+            <p>Информация об антидопинговом образовании и прохождении курса.</p>
+            <a
+              className="text-link"
+              href="https://rusada.ru"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Официальный сайт РУСАДА <ArrowUpRight size={15} />
+            </a>
+          </section>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+export function Coaching() {
+  const { role } = useAuth();
+  const q = useData("/links");
+  const athletes = useData("/athletes", role === "coach");
+  const meta = useData("/metadata");
+  const [show, setShow] = useState(false);
+  const [athlete, setAthlete] = useState("");
+  const [discipline, setDiscipline] = useState("1");
+  const action = useAction();
+  return (
+    <>
+      <PageTitle
+        title={role === "coach" ? "Мои спортсмены" : "Связи с тренерами"}
+        description="Привязка действует только после подтверждения спортсменом. История изменений сохраняется."
+      >
+        {role === "coach" && (
+          <Button onClick={() => setShow(true)}>
+            <Plus size={16} />
+            Пригласить спортсмена
+          </Button>
+        )}
+      </PageTitle>
+      <section className="panel">
+        <State query={q}>
+          {q.data?.length ? (
+            <Table
+              heads={["Спортсмен", "Тренер / дисциплина", "Статус", "Действия"]}
+            >
+              {q.data.map((l: any) => (
+                <tr key={l.id}>
+                  <td>
+                    <strong>{l.athlete}</strong>
+                    <details>
+                      <summary>История связи</summary>
+                      {l.history.map((h: any) => (
+                        <small key={h.id}>
+                          {date(h.at)} · {h.status}
+                        </small>
+                      ))}
+                    </details>
+                  </td>
+                  <td>
+                    {l.coach}
+                    <small>
+                      {
+                        meta.data?.disciplines.find(
+                          (d: any) => d.id === l.discipline_id,
+                        )?.short_name
+                      }
+                    </small>
+                  </td>
+                  <td>
+                    <Badge value={l.status} />
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      {role === "athlete" &&
+                        ["pending", "paused"].includes(l.status) && (
+                          <Button
+                            size="sm"
+                            disabled={action.isPending}
+                            onClick={() =>
+                              action.mutate({
+                                method: "patch",
+                                url: "/links/" + l.id,
+                                data: { status: "active" },
+                              })
+                            }
+                          >
+                            Подтвердить
+                          </Button>
+                        )}
+                      {l.status === "active" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            action.mutate({
+                              method: "patch",
+                              url: "/links/" + l.id,
+                              data: { status: "paused" },
+                            })
+                          }
+                        >
+                          Приостановить
+                        </Button>
+                      )}
+                      {l.status !== "ended" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            action.mutate({
+                              method: "patch",
+                              url: "/links/" + l.id,
+                              data: { status: "ended" },
+                            })
+                          }
+                        >
+                          Завершить
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          ) : (
+            <Empty
+              text="Связей со спортсменами пока нет"
+              hint="Тренер отправляет запрос; спортсмен подтверждает его в своём кабинете."
+            />
+          )}
+        </State>
+      </section>
+      <Dialog open={show} onOpenChange={setShow} title="Запрос на привязку">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await action.mutateAsync({
+                url: "/links",
+                data: { athlete_id: +athlete, discipline_id: +discipline },
+              });
+              setShow(false);
+            } catch {}
+          }}
+        >
+          <Field label="Спортсмен">
+            <select
+              required
+              value={athlete}
+              onChange={(e) => setAthlete(e.target.value)}
+            >
+              <option value="">Выберите спортсмена</option>
+              {athletes.data?.map((a: any) => (
+                <option key={a.id} value={a.id}>
+                  {a.full_name} · {a.municipality}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Дисциплина">
+            <select
+              value={discipline}
+              onChange={(e) => setDiscipline(e.target.value)}
+            >
+              {meta.data?.disciplines.map((d: any) => (
+                <option value={d.id} key={d.id}>
+                  {d.short_name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Button disabled={action.isPending}>Отправить запрос</Button>
+        </form>
+      </Dialog>
+    </>
+  );
+}
+export function Assignments() {
+  const q = useData("/assignments");
+  return (
+    <>
+      <PageTitle
+        title="Мои назначения"
+        description="Предстоящие соревнования и история работы в судейской коллегии."
+      />
+      <section className="panel">
+        <State query={q}>
+          {q.data?.length ? (
+            <Table heads={["Соревнование", "Дата", "Должность", "Статус"]}>
+              {q.data.map((j: any) => (
+                <tr key={j.competition_id}>
+                  <td>
+                    <Link to={"/competitions/" + j.competition_id}>
+                      {j.title}
+                    </Link>
+                  </td>
+                  <td>{date(j.start_date)}</td>
+                  <td>{j.position}</td>
+                  <td>
+                    <Badge value={j.state} />
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          ) : (
+            <Empty
+              text="Пока нет назначений"
+              hint="Федерация назначает судей на соревнования."
+            />
+          )}
+        </State>
+      </section>
+    </>
+  );
+}
+export function Notifications() {
+  const q = useData("/notifications");
+  const action = useAction();
+  return (
+    <>
+      <PageTitle
+        title="Уведомления"
+        description="События платформы и напоминания. Копии отправляются на электронную почту."
+      />
+      <section className="panel">
+        <State query={q}>
+          {q.data?.length ? (
+            q.data.map((n: any) => (
+              <div
+                className={"notice-row " + (!n.read_at ? "unread" : "")}
+                key={n.id}
+              >
+                <div className="notice-icon">
+                  <Bell size={18} />
+                </div>
+                <div>
+                  <h3>{n.title}</h3>
+                  <p>{n.body}</p>
+                  <small>
+                    {date(n.created_at)} ·{" "}
+                    {n.mailed_at
+                      ? "Отправлено на почту"
+                      : n.last_error
+                        ? "Ошибка отправки; повторим автоматически"
+                        : "В очереди на отправку"}
+                  </small>
+                </div>
+                {!n.read_at && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      action.mutate({
+                        method: "patch",
+                        url: "/notifications/" + n.id + "/read",
+                      })
+                    }
+                  >
+                    <Check size={16} />
+                    Прочитано
+                  </Button>
+                )}
+              </div>
+            ))
+          ) : (
+            <Empty text="Новых уведомлений пока нет" />
+          )}
+        </State>
+      </section>
+    </>
+  );
+}
+export function Audit() {
+  const q = useData("/audit");
+  const [search, setSearch] = useState("");
+  return (
+    <>
+      <PageTitle
+        title="Журнал действий"
+        description="Кто, когда и что изменил в платформе. Последние 500 событий."
+      />
+      <section className="panel">
+        <div className="toolbar">
+          <SearchBox value={search} onChange={setSearch} />
+        </div>
+        <State query={q}>
+          {q.data?.length ? (
+            <Table
+              heads={["Время", "Пользователь", "Роль", "Действие", "Детали"]}
+            >
+              {q.data
+                .filter((x: any) =>
+                  (x.action + x.full_name)
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
+                )
+                .map((x: any) => (
+                  <tr key={x.id}>
+                    <td>{new Date(x.created_at).toLocaleString("ru-RU")}</td>
+                    <td>{x.full_name}</td>
+                    <td>{roleNames[x.active_role]}</td>
+                    <td>
+                      <strong>{x.action}</strong>
+                      <small>
+                        {x.entity} #{x.entity_id}
+                      </small>
+                    </td>
+                    <td>
+                      <code className="audit-detail">
+                        {JSON.stringify(x.details)}
+                      </code>
+                    </td>
+                  </tr>
+                ))}
+            </Table>
+          ) : (
+            <Empty />
+          )}
+        </State>
+      </section>
+    </>
+  );
+}

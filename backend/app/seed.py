@@ -1,0 +1,287 @@
+"""Initialize reference data. --demo opts into entirely fictional personal data."""
+
+import argparse
+import os
+from datetime import date, timedelta
+from sqlalchemy import select
+from app.db import SessionLocal
+from app.models import *
+from app.security import password_hash, Actor
+from app.services.common import audit, age_at
+from app.services.ratings import recalculate
+from app.services.notifications import notify
+
+DISCIPLINES = [
+    ("Программирование алгоритмическое", "Алгоритмы"),
+    ("Программирование продуктовое", "Продуктовая разработка"),
+    (
+        "Программирование систем информационной безопасности",
+        "Информационная безопасность",
+    ),
+    ("Программирование систем искусственного интеллекта", "Искусственный интеллект"),
+    ("Программирование робототехники", "Робототехника"),
+    ("Программирование беспилотных авиационных систем", "Беспилотные системы"),
+]
+
+
+def seed(demo=False):
+    with SessionLocal() as db:
+        if not db.get(Role, "admin"):
+            db.add_all(
+                [
+                    Role(id=k, name=v)
+                    for k, v in [
+                        ("admin", "Федерация"),
+                        ("athlete", "Спортсмен"),
+                        ("coach", "Тренер"),
+                        ("judge", "Судья"),
+                    ]
+                ]
+            )
+        if not db.scalar(select(Discipline.id)):
+            db.add_all(
+                [
+                    Discipline(id=i + 1, name=n, short_name=s)
+                    for i, (n, s) in enumerate(DISCIPLINES)
+                ]
+            )
+        if not db.scalar(select(CompetitionType.id)):
+            db.add_all(
+                [
+                    CompetitionType(id=i + 1, name=n)
+                    for i, n in enumerate(
+                        ["Чемпионат", "Первенство", "Кубок", "Турнир"]
+                    )
+                ]
+            )
+        for level, values in [
+            ("russian_championship", (100, 80, 60)),
+            ("russian_junior", (80, 60, 40)),
+            ("interregional", (60, 45, 30)),
+            ("regional", (40, 30, 20)),
+        ]:
+            if not db.get(RatingRule, level):
+                db.add(
+                    RatingRule(
+                        level=level, first=values[0], second=values[1], third=values[2]
+                    )
+                )
+        db.commit()
+        if not demo or db.scalar(
+            select(User.id).where(User.email == "admin@demo.example")
+        ):
+            return
+        today = date.today()
+        year = today.year
+        hashed = password_hash.hash(os.getenv("DEMO_PASSWORD", "DemoPass2026!"))
+
+        def make(email, name, roles, born=date(1999, 5, 12)):
+            u = User(email=email, full_name=name, birth_date=born, password_hash=hashed)
+            u.roles = [db.get(Role, r) for r in roles]
+            db.add(u)
+            db.flush()
+            return u
+
+        admin = make(
+            "admin@demo.example",
+            "Демо · Алексей Северный",
+            ["admin", "athlete", "coach", "judge"],
+        )
+        trainer = make("coach@demo.example", "Демо · Марина Ветрова", ["coach"])
+        referee = make("judge@demo.example", "Демо · Павел Лесной", ["judge"])
+        orgs = [
+            Organization(name=n, kind="Учебный клуб", municipality=m)
+            for n, m in [
+                ("Демо · Код Оренбурга", "Оренбург"),
+                ("Демо · Орский алгоритм", "Орск"),
+                ("Демо · Бузулук IT", "Бузулук"),
+            ]
+        ]
+        db.add_all(orgs)
+        db.flush()
+        coach = Coach(user_id=trainer.id, organization_id=orgs[0].id)
+        db.add_all([coach, Coach(user_id=admin.id), Judge(user_id=admin.id)])
+        judge = Judge(user_id=referee.id)
+        db.add(judge)
+        db.flush()
+        db.add_all(
+            [
+                JudgeCategory(
+                    judge_id=j.id,
+                    name="Судья второй категории",
+                    assigned_on=today - timedelta(days=300),
+                    expires_on=today + timedelta(days=320),
+                    order_number="ДЕМО-26/С",
+                )
+                for j in db.scalars(select(Judge))
+            ]
+        )
+        names = [
+            "Арина Искрова",
+            "Михаил Полянов",
+            "София Звёздная",
+            "Илья Родников",
+            "Дарья Снежина",
+            "Матвей Лучистый",
+            "Ева Вершинина",
+            "Тимофей Озёрный",
+            "Анна Ладная",
+            "Никита Туманов",
+            "Вера Цветная",
+            "Лев Рассветов",
+            "Алиса Кедрова",
+            "Роман Радужный",
+            "Мирослава Ясная",
+            "Даниил Весенний",
+            "Полина Тихая",
+            "Артём Дальний",
+        ]
+        athletes = []
+        for i, name in enumerate(names):
+            u = make(
+                "athlete@demo.example" if i == 0 else f"athlete{i}@demo.example",
+                "Демо · " + name,
+                ["athlete"],
+                date(year - 17 - i % 9, 3, 10),
+            )
+            if age_at(u.birth_date) < 18:
+                u.guardian_name = "Демо · Законный представитель " + name.split()[-1]
+                u.guardian_consent_at = now()
+            a = Athlete(
+                user_id=u.id,
+                organization_id=orgs[i % 3].id,
+                municipality=orgs[i % 3].municipality,
+                training_stage="Учебно-тренировочный этап",
+                rusada_date=today - timedelta(days=60),
+            )
+            db.add(a)
+            db.flush()
+            athletes.append(a)
+            for d in {1, i % 6 + 1}:
+                db.add(
+                    AthleteDiscipline(
+                        athlete_id=a.id, discipline_id=d, start_year=year - 3 + i % 4
+                    )
+                )
+        a = Athlete(
+            user_id=admin.id, organization_id=orgs[0].id, municipality="Оренбург"
+        )
+        db.add(a)
+        db.flush()
+        athletes.append(a)
+        db.add(AthleteDiscipline(athlete_id=a.id, discipline_id=1, start_year=year - 1))
+        for a in athletes[1:6]:
+            link = AthleteCoach(
+                athlete_id=a.id, coach_id=coach.id, discipline_id=1, status="active"
+            )
+            db.add(link)
+            db.flush()
+            db.add(LinkHistory(link_id=link.id, actor_id=a.user_id, status="active"))
+        for k, days in enumerate([60, 30]):
+            c = Competition(
+                title=[
+                    "Демо · Чемпионат Оренбургской области",
+                    "Демо · Кубок регионов по алгоритмам",
+                ][k],
+                discipline_id=1,
+                type_id=1,
+                start_date=today - timedelta(days=days),
+                end_date=today - timedelta(days=days),
+                deadline=today - timedelta(days=days + 2),
+                location="Оренбург · Демо-арена",
+                format="onsite",
+                level="regional" if k == 0 else "interregional",
+                calendar_plan="Оренбургская область" if k == 0 else "ЕКП",
+                calendar_number=f"ДЕМО-{k + 1}",
+                state="published",
+            )
+            db.add(c)
+            db.flush()
+            db.add(
+                CompetitionJudge(
+                    competition_id=c.id, judge_id=judge.id, position="Главный судья"
+                )
+            )
+            for i, a in enumerate(athletes[:8]):
+                db.add(
+                    CompetitionApplication(
+                        competition_id=c.id,
+                        athlete_id=a.id,
+                        submitted_by=a.user_id,
+                        status="approved",
+                    )
+                )
+                db.add(
+                    CompetitionResult(
+                        competition_id=c.id,
+                        athlete_id=a.id,
+                        place=i + 1,
+                        score=1000 - i * 97 - k * 10,
+                    )
+                )
+        db.flush()
+        result = db.scalar(
+            select(CompetitionResult).where(
+                CompetitionResult.athlete_id == athletes[0].id
+            )
+        )
+        db.add(
+            SportsRank(
+                athlete_id=athletes[0].id,
+                discipline_id=1,
+                name="III",
+                assigned_on=today - timedelta(days=30),
+                expires_on=today + timedelta(days=21),
+                order_number="ДЕМО-26/Р",
+                result_id=result.id,
+            )
+        )
+        for i in range(6):
+            start = today + timedelta(days=10 + i * 6)
+            db.add(
+                Competition(
+                    title=[
+                        "Демо · Открытый кубок Оренбуржья",
+                        "Демо · Продуктовый хакатон",
+                        "Демо · Киберщит региона",
+                        "Демо · Интеллект на старте",
+                        "Демо · Робототехническая лига",
+                        "Демо · Беспилотный маршрут",
+                    ][i],
+                    discipline_id=i + 1,
+                    type_id=3,
+                    start_date=start,
+                    end_date=start + timedelta(days=1),
+                    deadline=start - timedelta(days=3),
+                    location="Оренбург · Технопарк"
+                    if i % 2 == 0
+                    else "Онлайн-платформа",
+                    format=["onsite", "online", "hybrid"][i % 3],
+                    level="regional",
+                    calendar_plan="Оренбургская область",
+                    calendar_number=f"ДЕМО-{i + 10}",
+                    state="open",
+                )
+            )
+        db.add(
+            Deadline(
+                title="Отчёт о численности занимающихся",
+                due_on=today + timedelta(days=12),
+            )
+        )
+        audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
+        notify(
+            db,
+            [u.id for u in db.scalars(select(User))],
+            "Добро пожаловать в ОренКод",
+            "Демонстрационный контур. Все персональные данные вымышлены.",
+            "demo-welcome",
+        )
+        recalculate(db, year)
+        db.commit()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--demo", action="store_true")
+    seed(parser.parse_args().demo)
