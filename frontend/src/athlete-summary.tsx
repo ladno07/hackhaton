@@ -16,6 +16,7 @@ export function AthleteSummary() {
   const data = query.data;
   return <>
     <PageTitle title="Сводка выступлений" description={data?.athlete.full_name || "Результаты подопечного"}>
+      <Button variant="outline" asChild><Link to={`/path/${id}`}>Личный путь</Link></Button>
       <Button variant="outline" asChild><Link to="/coaching">К моим спортсменам</Link></Button>
     </PageTitle>
     <section className="panel">

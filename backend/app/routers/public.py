@@ -5,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import *
+from app.services.glossary import CATEGORIES, LEVELS, glossary_terms
+from app.services.ratings import RANKS
 
 router = APIRouter(prefix="/public", tags=["Публичные страницы"])
 
@@ -94,5 +96,46 @@ def navigator(db: Session = Depends(get_db)):
                 "registration_open": c.state == "open" and c.deadline >= today,
             }
             for c in upcoming
+        ],
+    }
+
+
+@router.get("/glossary")
+def glossary(db: Session = Depends(get_db)):
+    """Terms plus the rules the platform already uses: rank ladder, rating, EVSK."""
+    disciplines = {d.id: d.short_name for d in db.scalars(select(Discipline))}
+    rules = {r.level: r for r in db.scalars(select(RatingRule))}
+    evsk = db.scalars(select(EvskRule)).all()
+    order = {name: i for i, name in enumerate(RANKS)}
+    return {
+        "categories": CATEGORIES,
+        "terms": glossary_terms(),
+        "ladder": RANKS,
+        "levels": [
+            {
+                "id": key,
+                "name": name,
+                "points": [rules[key].first, rules[key].second, rules[key].third]
+                if key in rules
+                else None,
+            }
+            for key, name in LEVELS.items()
+        ],
+        "evsk": [
+            {
+                "id": r.id,
+                "discipline_id": r.discipline_id,
+                "discipline": disciplines.get(r.discipline_id),
+                "rank": r.rank_name,
+                "level": r.level,
+                "level_name": LEVELS.get(r.level, r.level),
+                "max_place": r.max_place,
+                "min_participants": r.min_participants,
+                "source": r.source,
+            }
+            for r in sorted(
+                evsk,
+                key=lambda r: (r.discipline_id, order.get(r.rank_name, len(RANKS))),
+            )
         ],
     }

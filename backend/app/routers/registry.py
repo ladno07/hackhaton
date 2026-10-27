@@ -15,6 +15,7 @@ from app.schemas import (
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify
+from app.services.path import personal_path
 from app.services.ratings import rating_levels
 
 router = APIRouter(tags=["Реестры и профили"])
@@ -150,6 +151,15 @@ def athlete_detail(
     db: Session = Depends(get_db),
 ):
     return athlete_view(db, can_athlete(db, actor, athlete_id))
+
+
+@router.get("/athletes/{athlete_id}/path")
+def athlete_path(
+    athlete_id: int,
+    actor: Actor = Depends(allow("athlete", "coach", "admin")),
+    db: Session = Depends(get_db),
+):
+    return personal_path(db, can_athlete(db, actor, athlete_id))
 
 
 @router.put("/athletes/{athlete_id}")
