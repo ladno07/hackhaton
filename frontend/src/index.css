@@ -2516,3 +2516,34 @@ td a:hover {
 .group-picker input[type="checkbox"] {
   width: auto;
 }
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.protocol-history {
+  border-top: 1px solid #e9ebef;
+  padding-bottom: 8px;
+}
+.protocol-history h3 {
+  font-size: 13px;
+  padding: 20px 24px 0;
+}
+.protocol-version + .protocol-version {
+  border-top: 1px dashed #e9ebef;
+}
+.protocol-version .panel-heading {
+  padding: 14px 24px;
+}
+.protocol-version ul {
+  margin: 0 24px 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #4b5160;
+  list-style: disc;
+}
+.protocol-version .inline-error {
+  margin: 0 24px 14px;
+}

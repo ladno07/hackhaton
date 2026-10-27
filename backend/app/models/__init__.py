@@ -244,10 +244,11 @@ class CompetitionJudge(Base):
 
 
 class CompetitionResult(Base):
+    """Places may be shared ("1, 1, 3"); team members share place and score."""
+
     __tablename__ = "competition_results"
     __table_args__ = (
         UniqueConstraint("competition_id", "athlete_id"),
-        UniqueConstraint("competition_id", "place"),
         CheckConstraint("place > 0"),
         CheckConstraint("score >= 0"),
     )
@@ -256,6 +257,21 @@ class CompetitionResult(Base):
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
     place: Mapped[int] = mapped_column(Integer)
     score: Mapped[float] = mapped_column(Float)
+    team_name: Mapped[str | None] = mapped_column(String(120))
+
+
+class ProtocolVersion(Base):
+    """Snapshot of a published protocol; version 1 is the first publication."""
+
+    __tablename__ = "protocol_versions"
+    __table_args__ = (UniqueConstraint("competition_id", "version"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"))
+    version: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    reason: Mapped[str] = mapped_column(Text)
+    entries: Mapped[list] = mapped_column(JSON)
 
 
 class SportsRank(Base):

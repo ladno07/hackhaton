@@ -577,44 +577,79 @@ export function Competitions() {
     </>
   );
 }
-function ResultsEditor({ comp }: any) {
+function ResultsEditor({ comp, correction, onDone }: any) {
   const approved = comp.applications.filter(
     (a: any) => a.status === "approved",
   );
   const [results, setResults] = useState<any[]>(
-    approved.map((a: any, i: number) => ({
-      athlete_id: a.athlete_id,
-      full_name: a.full_name,
-      place: i + 1,
-      score: 0,
-    })),
+    correction
+      ? comp.results.map((r: any) => ({ ...r, team_name: r.team_name || "" }))
+      : approved.map((a: any, i: number) => ({
+          athlete_id: a.athlete_id,
+          full_name: a.full_name,
+          team_name: "",
+          place: i + 1,
+          score: 0,
+        })),
   );
+  const [reason, setReason] = useState("");
   const action = useAction();
+  const update = (i: number, k: string, val: any) =>
+    setResults(results.map((v, j) => (j === i ? { ...v, [k]: val } : v)));
+  const teams = [
+    ...new Set(results.map((r) => r.team_name.trim()).filter(Boolean)),
+  ];
   return (
     <form
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        action.mutate({
-          url: "/competitions/" + comp.id + "/results",
-          data: {
-            results: results.map(({ athlete_id, place, score }) => ({
-              athlete_id,
-              place,
-              score,
-            })),
-          },
-        });
+        try {
+          await action.mutateAsync({
+            method: correction ? "put" : "post",
+            url: "/competitions/" + comp.id + "/results",
+            data: {
+              results: results.map(({ athlete_id, place, score, team_name }) => ({
+                athlete_id,
+                place,
+                score,
+                team_name: team_name.trim() || null,
+              })),
+              ...(correction ? { reason } : {}),
+            },
+          });
+          onDone?.();
+        } catch {}
       }}
     >
       <div className="inline-note">
-        Протокол включает всех одобренных участников. Укажите итоговые места от
-        1 до {approved.length}. После публикации результаты и рейтинг обновятся
-        автоматически.
+        Протокол включает всех одобренных участников. Одинаковые места
+        допускаются: после N участников на одном месте следующее место
+        пропускает N − 1 позиций (1, 1, 3). Для командного зачёта укажите
+        название команды: у её участников должны совпадать место и баллы, а
+        команда занимает одну позицию.{" "}
+        {correction
+          ? "Исправление сохранится новой редакцией, рейтинг пересчитается, участники получат уведомление."
+          : "После публикации результаты и рейтинг обновятся автоматически."}
       </div>
-      <Table heads={["Спортсмен", "Место", "Баллы"]}>
+      <datalist id={"teams-" + comp.id}>
+        {teams.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+      <Table heads={["Спортсмен", "Команда", "Место", "Баллы"]}>
         {results.map((r: any, i: number) => (
           <tr key={r.athlete_id}>
             <td>{r.full_name}</td>
+            <td>
+              <input
+                aria-label={"Команда: " + r.full_name}
+                list={"teams-" + comp.id}
+                maxLength={120}
+                placeholder="Личный зачёт"
+                value={r.team_name}
+                onChange={(e) => update(i, "team_name", e.target.value)}
+              />
+            </td>
             <td>
               <input
                 aria-label={"Место: " + r.full_name}
@@ -623,13 +658,7 @@ function ResultsEditor({ comp }: any) {
                 max={results.length}
                 required
                 value={r.place}
-                onChange={(e) =>
-                  setResults(
-                    results.map((v, j) =>
-                      j === i ? { ...v, place: +e.target.value } : v,
-                    ),
-                  )
-                }
+                onChange={(e) => update(i, "place", +e.target.value)}
               />
             </td>
             <td>
@@ -640,25 +669,94 @@ function ResultsEditor({ comp }: any) {
                 step="any"
                 required
                 value={r.score}
-                onChange={(e) =>
-                  setResults(
-                    results.map((v, j) =>
-                      j === i ? { ...v, score: +e.target.value } : v,
-                    ),
-                  )
-                }
+                onChange={(e) => update(i, "score", +e.target.value)}
               />
             </td>
           </tr>
         ))}
       </Table>
       <div className="panel-padding">
-        <Button disabled={action.isPending || !results.length}>
-          <Trophy size={16} />
-          Опубликовать результаты и протокол
-        </Button>
+        {correction && (
+          <Field label="Основание исправления">
+            <textarea
+              required
+              minLength={5}
+              maxLength={2000}
+              rows={2}
+              placeholder="Например: ошибка в подсчёте баллов, решение апелляционной комиссии"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </Field>
+        )}
+        <div className="button-row">
+          <Button disabled={action.isPending || !results.length}>
+            <Trophy size={16} />
+            {correction
+              ? `Опубликовать редакцию ${comp.protocol_version + 1}`
+              : "Опубликовать результаты и протокол"}
+          </Button>
+          {correction && (
+            <Button type="button" variant="outline" onClick={onDone}>
+              Отмена
+            </Button>
+          )}
+        </div>
       </div>
     </form>
+  );
+}
+const changeText = (c: any) =>
+  [
+    c.old_place !== c.place && `место ${c.old_place} → ${c.place}`,
+    c.old_score !== c.score && `баллы ${c.old_score} → ${c.score}`,
+    c.old_team_name !== c.team_name &&
+      `команда ${c.old_team_name || "—"} → ${c.team_name || "—"}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+function ProtocolHistory({ id }: any) {
+  const history = useData(`/competitions/${id}/protocol-versions`);
+  return (
+    <State query={history}>
+      {history.data?.length > 0 && (
+        <div className="protocol-history">
+          <h3>История редакций</h3>
+          {history.data.map((v: any) => (
+            <div className="protocol-version" key={v.version}>
+              <div className="panel-heading">
+                <div>
+                  <strong>Редакция {v.version}</strong>
+                  <p>
+                    {date(v.created_at)}
+                    {v.author ? " · " + v.author : ""} · {v.reason}
+                  </p>
+                </div>
+                <ExportButtons
+                  base={`/exports/protocol/${id}?version=${v.version}`}
+                  name={`protocol-${id}-v${v.version}`}
+                />
+              </div>
+              {v.changes.length > 0 && (
+                <ul>
+                  {v.changes.map((c: any) => (
+                    <li key={c.result_id}>
+                      {c.full_name}: {changeText(c)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {v.rank_warnings.length > 0 && (
+                <div className="inline-error">
+                  Исправление затронуло основания разрядов, проверьте их:{" "}
+                  {v.rank_warnings.join("; ")}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </State>
   );
 }
 export function CompetitionDetail() {
@@ -673,10 +771,12 @@ export function CompetitionDetail() {
   const action = useAction();
   const [tab, setTab] = useState("applications");
   const [edit, setEdit] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
   const [athlete, setAthlete] = useState("");
   const [judge, setJudge] = useState("");
   const [position, setPosition] = useState("Главный судья");
   const comp = query.data;
+  const teamProtocol = comp?.results.some((r: any) => r.team_name);
   const eligibility = useData(
     `/competitions/${id}/eligibility?athlete_id=${athlete}`,
     role === "coach" && !!athlete,
@@ -978,16 +1078,44 @@ export function CompetitionDetail() {
                   />
                 ))}
               {tab === "results" &&
-                (comp.state === "published" ? (
+                (comp.state === "published" && correcting ? (
+                  <ResultsEditor
+                    comp={comp}
+                    correction
+                    onDone={() => setCorrecting(false)}
+                  />
+                ) : comp.state === "published" ? (
                   <>
                     <div className="panel-heading">
-                      <h2>Итоговый протокол</h2>
-                      <ExportButtons
-                        base={"/exports/protocol/" + id}
-                        name={"protocol-" + id}
-                      />
+                      <div>
+                        <h2>Итоговый протокол</h2>
+                        {comp.protocol_version > 1 && (
+                          <p>Редакция {comp.protocol_version}</p>
+                        )}
+                      </div>
+                      <div className="button-row">
+                        {role === "admin" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCorrecting(true)}
+                          >
+                            Исправить протокол
+                          </Button>
+                        )}
+                        <ExportButtons
+                          base={"/exports/protocol/" + id}
+                          name={"protocol-" + id}
+                        />
+                      </div>
                     </div>
-                    <Table heads={["Место", "Спортсмен", "Баллы"]}>
+                    <Table
+                      heads={
+                        teamProtocol
+                          ? ["Место", "Команда", "Спортсмен", "Баллы"]
+                          : ["Место", "Спортсмен", "Баллы"]
+                      }
+                    >
                       {comp.results.map((r: any) => (
                         <tr key={r.id}>
                           <td>
@@ -997,11 +1125,13 @@ export function CompetitionDetail() {
                               {r.place}
                             </span>
                           </td>
+                          {teamProtocol && <td>{r.team_name || "—"}</td>}
                           <td>{r.full_name}</td>
                           <td>{r.score}</td>
                         </tr>
                       ))}
                     </Table>
+                    <ProtocolHistory id={id} />
                   </>
                 ) : role === "admin" && comp.state === "closed" ? (
                   <ResultsEditor

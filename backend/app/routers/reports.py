@@ -7,6 +7,7 @@ from app.models import *
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.reports import population, export_document, MIME
+from app.services.protocols import versions
 
 router = APIRouter(tags=["Документы и аналитика"])
 
@@ -153,36 +154,48 @@ def export_population(
 def protocol(
     comp_id: int,
     fmt: str,
+    version: int | None = None,
     actor: Actor = Depends(current_actor),
     db: Session = Depends(get_db),
 ):
     comp = require(db, Competition, comp_id)
     if comp.state != "published":
         raise HTTPException(409, "Протокол ещё не опубликован")
-    rows = []
-    for r in db.scalars(
-        select(CompetitionResult)
-        .where(CompetitionResult.competition_id == comp.id)
-        .order_by(CompetitionResult.place)
-    ):
-        a = db.get(Athlete, r.athlete_id)
-        org = db.get(Organization, a.organization_id) if a.organization_id else None
-        rows.append(
-            [r.place, a.user.full_name, org.name if org else "Без организации", r.score]
-        )
+    history = versions(db, comp.id)
+    picked = (
+        next((v for v in history if v.version == version), None)
+        if version
+        else history[-1]
+    )
+    if not picked:
+        raise HTTPException(404, "Редакция протокола не найдена")
+    teams = any(e["team_name"] for e in picked.entries)
+    rows = [
+        [e["place"]]
+        + ([e["team_name"] or "—"] if teams else [])
+        + [e["full_name"], e["organization"], e["score"]]
+        for e in picked.entries
+    ]
     judges = "; ".join(
         f"{db.get(Judge, j.judge_id).user.full_name} — {j.position}"
         for j in db.scalars(
             select(CompetitionJudge).where(CompetitionJudge.competition_id == comp.id)
         )
     )
+    edition = f"Редакция {picked.version} от {picked.created_at:%d.%m.%Y}"
+    if picked.version > 1:
+        edition += f", основание исправления: {picked.reason}"
+    if picked is not history[-1]:
+        edition += f". Заменена редакцией {history[-1].version}"
     return download(
         "Итоговый протокол: " + comp.title,
-        ["Место", "Спортсмен", "Организация", "Баллы"],
+        ["Место"]
+        + (["Команда"] if teams else [])
+        + ["Спортсмен", "Организация", "Баллы"],
         rows,
         fmt,
-        f"protocol-{comp.id}",
-        f"{comp.start_date} — {comp.end_date}. {comp.location}. {comp.calendar_plan} № {comp.calendar_number}. Судейская коллегия: {judges or 'не назначена'}",
+        f"protocol-{comp.id}-v{picked.version}",
+        f"{edition}. {comp.start_date} — {comp.end_date}. {comp.location}. {comp.calendar_plan} № {comp.calendar_number}. Судейская коллегия: {judges or 'не назначена'}",
     )
 
 

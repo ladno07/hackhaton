@@ -2043,6 +2043,136 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Соревнования"
+        ],
+        "summary": "Correct",
+        "operationId": "correct_api_competitions__comp_id__results_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "comp_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Comp Id"
+            }
+          },
+          {
+            "name": "x-active-role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Active-Role"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtocolCorrectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/competitions/{comp_id}/protocol-versions": {
+      "get": {
+        "tags": [
+          "Соревнования"
+        ],
+        "summary": "Protocol Versions",
+        "operationId": "protocol_versions_api_competitions__comp_id__protocol_versions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "comp_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Comp Id"
+            }
+          },
+          {
+            "name": "x-active-role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Active-Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/results": {
@@ -4019,6 +4149,22 @@
             }
           },
           {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
             "name": "x-active-role",
             "in": "header",
             "required": false,
@@ -4827,6 +4973,31 @@
         ],
         "title": "ProfileIn"
       },
+      "ProtocolCorrectionIn": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ResultIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Results"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "results",
+          "reason"
+        ],
+        "title": "ProtocolCorrectionIn"
+      },
       "RankDecision": {
         "properties": {
           "status": {
@@ -5031,6 +5202,19 @@
             "type": "number",
             "minimum": 0.0,
             "title": "Score"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
           }
         },
         "additionalProperties": false,

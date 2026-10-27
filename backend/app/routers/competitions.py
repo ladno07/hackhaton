@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import PurePath
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import *
@@ -12,6 +12,7 @@ from app.schemas import (
     ApplicationIn,
     Decision,
     ResultsIn,
+    ProtocolCorrectionIn,
     JudgeIn,
     CompetitionTypeIn,
     AgeGroupIn,
@@ -20,6 +21,13 @@ from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify, admins, athlete_audience
 from app.services.ratings import recalculate, rating_level
+from app.services.protocols import (
+    add_version,
+    check_entries,
+    current_results,
+    rank_warnings,
+    version_history,
+)
 from app.services.age_groups import (
     age_check,
     age_error,
@@ -237,14 +245,15 @@ def detail(
         ],
         "results": [
             {**row(r), "full_name": db.get(Athlete, r.athlete_id).user.full_name}
-            for r in db.scalars(
-                select(CompetitionResult)
-                .where(CompetitionResult.competition_id == comp.id)
-                .order_by(CompetitionResult.place)
-            )
+            for r in current_results(db, comp.id)
         ]
         if comp.state == "published" or actor.role == "admin"
         else [],
+        "protocol_version": db.scalar(
+            select(func.max(ProtocolVersion.version)).where(
+                ProtocolVersion.competition_id == comp.id
+            )
+        ),
         "judges": [
             {**row(j), "full_name": db.get(Judge, j.judge_id).user.full_name}
             for j in judges
@@ -478,17 +487,7 @@ def publish(
             )
         ).all()
     )
-    ids = [r.athlete_id for r in data.results]
-    places = [r.place for r in data.results]
-    if (
-        set(ids) != approved
-        or len(set(ids)) != len(ids)
-        or sorted(places) != list(range(1, len(approved) + 1))
-    ):
-        raise HTTPException(
-            422,
-            "Нужны результаты всех одобренных участников с уникальными местами от 1 до N",
-        )
+    check_entries(data.results, approved)
     db.add_all(
         [
             CompetitionResult(competition_id=comp.id, **r.model_dump())
@@ -496,12 +495,13 @@ def publish(
         ]
     )
     comp.state = "published"
+    add_version(db, comp, actor.user.id)
     audit(
         db,
         actor,
         "Публикация результатов и протокола",
         comp,
-        {"participants": len(ids)},
+        {"participants": len(data.results)},
     )
     recalculate(db, comp.start_date.year)
     for athlete_id in approved:
@@ -512,7 +512,71 @@ def publish(
             comp.title,
             f"protocol:{comp.id}:{athlete_id}",
         )
-    return {"state": comp.state, "count": len(ids)}
+    return {"state": comp.state, "count": len(data.results), "version": 1}
+
+
+@router.put("/competitions/{comp_id}/results")
+def correct(
+    comp_id: int,
+    data: ProtocolCorrectionIn,
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    comp = locked(db, comp_id)
+    if comp.state != "published":
+        raise HTTPException(409, "Исправить можно только опубликованный протокол")
+    current = {r.athlete_id: r for r in current_results(db, comp.id)}
+    check_entries(data.results, current)
+    fields = ("place", "score", "team_name")
+    changed = [
+        r
+        for r in data.results
+        if any(getattr(current[r.athlete_id], k) != getattr(r, k) for k in fields)
+    ]
+    if not changed:
+        raise HTTPException(422, "Изменений в протоколе нет")
+    # rows keep their ids: ranks and rank applications refer to them
+    for r in changed:
+        for k in fields:
+            setattr(current[r.athlete_id], k, getattr(r, k))
+    version = add_version(db, comp, actor.user.id, data.reason)
+    warnings = rank_warnings(db, [current[r.athlete_id].id for r in changed])
+    audit(
+        db,
+        actor,
+        "Исправление протокола",
+        comp,
+        {
+            "version": version.version,
+            "reason": data.reason,
+            "changed": len(changed),
+            "rank_warnings": warnings,
+        },
+    )
+    recalculate(db, comp.start_date.year)
+    for athlete_id in current:
+        notify(
+            db,
+            athlete_audience(db, athlete_id),
+            "Протокол исправлен",
+            f"{comp.title}: редакция {version.version}. {data.reason}",
+            f"protocol:{comp.id}:{athlete_id}:v{version.version}",
+        )
+    return {
+        "version": version.version,
+        "changed": len(changed),
+        "rank_warnings": warnings,
+    }
+
+
+@router.get("/competitions/{comp_id}/protocol-versions")
+def protocol_versions(
+    comp_id: int, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)
+):
+    comp = require(db, Competition, comp_id)
+    if comp.state != "published":
+        return []
+    return version_history(db, comp.id)
 
 
 @router.get("/results")
