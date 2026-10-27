@@ -98,6 +98,13 @@ def test_expired_access_can_refresh_but_expired_session_cannot(env):
     )
 
 
+@pytest.mark.parametrize("origin", ["http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:5173", "http://127.0.0.1:5173"])
+def test_local_origins_can_log_in(env, origin):
+    client, _, _, _ = env
+    response = client.post("/api/auth/login", json=LOGIN, headers={"Origin": origin})
+    assert response.status_code == 200, response.text
+
+
 def test_foreign_origins_and_forged_cookie_are_rejected(env):
     client, _, _, _ = env
     client.post("/api/auth/login", json=LOGIN)
