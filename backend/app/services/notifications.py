@@ -156,6 +156,10 @@ async def worker():
         await asyncio.sleep(60)
 
 
+# Public calendar events; personal and internal federation events stay hidden.
+MINISTRY_EVENTS = {"competition-open", "competition-regulation"}
+
+
 def visible_in_role(db, actor, notice):
     """Account ownership is checked by the router; this additionally scopes role-specific events."""
     if actor.role == "admin":
@@ -164,6 +168,8 @@ def visible_in_role(db, actor, notice):
 
     parts = notice.event_key.split(":")
     kind = parts[0]
+    if actor.role == "ministry":
+        return kind in MINISTRY_EVENTS or notice.event_key.startswith("deadline:comp:")
     if kind in {"application", "rank-application"}:
         return False
     if kind == "deadline":
