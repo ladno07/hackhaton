@@ -27,6 +27,7 @@ import {
   Trophy,
   Users,
   X,
+  ClipboardList,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames } from "./lib";
@@ -39,7 +40,6 @@ import {
   History,
   Profile,
   Coaching,
-  Assignments,
   Notifications,
   Audit,
 } from "./pages";
@@ -47,6 +47,7 @@ import { Competitions, CompetitionDetail } from "./competitions";
 import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 
 import { AthleteSummary } from "./athlete-summary";
+import { Assignments, JudgingHistory } from "./judging";
 
 function Login() {
   const auth = useAuth();
@@ -298,8 +299,14 @@ const navigation = [
   },
   {
     to: "/assignments",
-    label: "Мои назначения",
+    label: "Назначения",
     icon: Gavel,
+    roles: ["judge"],
+  },
+  {
+    to: "/judging",
+    label: "Мои соревнования",
+    icon: ClipboardList,
     roles: ["judge"],
   },
   {
@@ -535,6 +542,10 @@ export default function App() {
               <Assignments />
             </Guard>
           }
+        />
+        <Route
+          path="judging"
+          element={<Guard roles={["judge"]}><JudgingHistory /></Guard>}
         />
         <Route path="ranks" element={<Ranks />} />
         <Route path="ratings" element={<Ratings />} />

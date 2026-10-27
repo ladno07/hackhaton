@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -44,7 +45,11 @@ def dashboard(actor: Actor = Depends(current_actor), db: Session = Depends(get_d
         db.scalar(
             select(func.count())
             .select_from(CompetitionJudge)
-            .where(CompetitionJudge.judge_id == judge_id)
+            .join(Competition, Competition.id == CompetitionJudge.competition_id)
+            .where(
+                CompetitionJudge.judge_id == judge_id,
+                Competition.end_date >= date.today(),
+            )
         )
         if judge_id
         else 0
@@ -329,3 +334,97 @@ def coaching_summary(
         },
         "results": results,
     }
+
+
+def judging_history(db, judge_id, year=None):
+    """Competitions the judge worked at, i.e. assignments that already ended."""
+    entries = db.execute(
+        select(CompetitionJudge, Competition, Discipline)
+        .join(Competition, Competition.id == CompetitionJudge.competition_id)
+        .join(Discipline, Discipline.id == Competition.discipline_id)
+        .where(
+            CompetitionJudge.judge_id == judge_id, Competition.end_date < date.today()
+        )
+        .order_by(Competition.start_date.desc(), Competition.id.desc())
+    ).all()
+    participants = dict(
+        db.execute(
+            select(CompetitionResult.competition_id, func.count())
+            .where(
+                CompetitionResult.competition_id.in_(
+                    [c.id for _, c, _ in entries]
+                )
+            )
+            .group_by(CompetitionResult.competition_id)
+        ).all()
+    )
+    years = sorted({c.start_date.year for _, c, _ in entries}, reverse=True)
+    items = [
+        {
+            "competition_id": c.id,
+            "title": c.title,
+            "start_date": c.start_date,
+            "end_date": c.end_date,
+            "location": c.location,
+            "discipline": d.short_name,
+            "status": c.status,
+            "state": c.state,
+            "position": j.position,
+            "participants": participants.get(c.id, 0),
+        }
+        for j, c, d in entries
+        if year is None or c.start_date.year == year
+    ]
+    return years, items
+
+
+@router.get("/judging/report")
+def judging_report(
+    year: int | None = Query(None, ge=1970, le=2100),
+    actor: Actor = Depends(allow("judge")),
+    db: Session = Depends(get_db),
+):
+    judge = own(db, Judge, actor)
+    years, items = judging_history(db, judge.id, year)
+    return {
+        "judge": {"id": judge.id, "full_name": actor.user.full_name},
+        "years": years,
+        "stats": {
+            "competitions": len(items),
+            "chief": sum(i["position"] == "Главный судья" for i in items),
+            "participants": sum(i["participants"] for i in items),
+            "disciplines": len({i["discipline"] for i in items}),
+        },
+        "items": items,
+    }
+
+
+@router.get("/exports/judging.{fmt}")
+def judging_export(
+    fmt: Literal["pdf", "docx", "xlsx"],
+    year: int | None = Query(None, ge=1970, le=2100),
+    actor: Actor = Depends(allow("judge")),
+    db: Session = Depends(get_db),
+):
+    judge = own(db, Judge, actor)
+    _, items = judging_history(db, judge.id, year)
+    period = f"{year} год" if year else "за всё время"
+    return download(
+        f"Отчёт о судейской деятельности: {actor.user.full_name}",
+        ["Даты", "Соревнование", "Дисциплина", "Место проведения", "Должность", "Участников"],
+        [
+            [
+                f"{i['start_date']} — {i['end_date']}",
+                i["title"],
+                i["discipline"],
+                i["location"],
+                i["position"],
+                i["participants"],
+            ]
+            for i in items
+        ],
+        fmt,
+        f"judging-{judge.id}" + (f"-{year}" if year else ""),
+        f"Период: {period}. Соревнований: {len(items)}, из них главным судьёй: "
+        f"{sum(i['position'] == 'Главный судья' for i in items)}.",
+    )
