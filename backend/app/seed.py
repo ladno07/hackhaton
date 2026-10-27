@@ -213,6 +213,38 @@ def seed(demo=False):
         db.flush()
         athletes.append(a)
         db.add(AthleteDiscipline(athlete_id=a.id, discipline_id=1, start_year=year - 1))
+        for a in athletes:
+            first = min(
+                db.scalars(
+                    select(AthleteDiscipline.start_year).where(
+                        AthleteDiscipline.athlete_id == a.id
+                    )
+                )
+            )
+            db.add(
+                AthleteOrganization(
+                    athlete_id=a.id,
+                    organization_id=a.organization_id,
+                    start_date=date(first, 1, 1),
+                )
+            )
+        # Demo transfer: the second athlete moved from Orenburg to Orsk last autumn.
+        moved = athletes[1]
+        db.flush()
+        period = db.scalar(
+            select(AthleteOrganization).where(
+                AthleteOrganization.athlete_id == moved.id
+            )
+        )
+        period.organization_id = orgs[0].id
+        period.end_date = date(year - 1, 8, 31)
+        db.add(
+            AthleteOrganization(
+                athlete_id=moved.id,
+                organization_id=moved.organization_id,
+                start_date=date(year - 1, 9, 1),
+            )
+        )
         for a in athletes[1:6]:
             link = AthleteCoach(
                 athlete_id=a.id, coach_id=coach.id, discipline_id=1, status="active"
