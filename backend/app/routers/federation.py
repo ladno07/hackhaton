@@ -309,7 +309,7 @@ def evsk_candidates(
             .join(Competition, Competition.id == CompetitionResult.competition_id)
             .where(
                 Competition.discipline_id == rule.discipline_id,
-                Competition.level == rule.level,
+                Competition.rating_level == rule.level,
                 Competition.state == "published",
                 CompetitionResult.place <= rule.max_place,
             )

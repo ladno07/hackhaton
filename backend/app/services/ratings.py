@@ -17,6 +17,29 @@ RANKS = [
     "МСМК",
 ]
 
+STATUSES = ["regional", "interregional", "national"]
+RATING_CLASSES = ["main", "junior", "other"]
+
+
+def rating_level(status, rating_class):
+    """Rating level from the competition status and the rating class of its type.
+
+    A national tournament outside the main/junior classes counts as interregional.
+    """
+    if status != "national":
+        return status
+    return {"main": "russian_championship", "junior": "russian_junior"}.get(
+        rating_class, "interregional"
+    )
+
+
+def rating_levels(db):
+    """status -> type_id -> rating level, for the competition form preview."""
+    types = db.scalars(select(CompetitionType)).all()
+    return {
+        s: {t.id: rating_level(s, t.rating_class) for t in types} for s in STATUSES
+    }
+
 
 def recalculate(db, season):
     if db.bind.dialect.name == "postgresql":
@@ -33,7 +56,7 @@ def recalculate(db, season):
             Competition.start_date <= date(season, 12, 31),
         )
     ):
-        rule = rules.get(comp.level)
+        rule = rules.get(comp.rating_level)
         points = (
             [rule.first, rule.second, rule.third][result.place - 1]
             if rule and result.place <= 3
@@ -45,7 +68,7 @@ def recalculate(db, season):
                 "title": comp.title,
                 "place": result.place,
                 "points": points,
-                "level": comp.level,
+                "level": comp.rating_level,
             }
         )
     db.execute(delete(Rating).where(Rating.season == season))

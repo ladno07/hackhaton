@@ -15,6 +15,7 @@ from app.schemas import (
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify
+from app.services.ratings import rating_levels
 
 router = APIRouter(tags=["Реестры и профили"])
 
@@ -55,6 +56,7 @@ def metadata(actor: Actor = Depends(current_actor), db: Session = Depends(get_db
             row(x) for x in db.scalars(select(Discipline).order_by(Discipline.id))
         ],
         "types": [row(x) for x in db.scalars(select(CompetitionType))],
+        "rating_levels": rating_levels(db),
         "organizations": [row(x) for x in db.scalars(select(Organization))],
         "age_groups": [
             row(x)

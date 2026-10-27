@@ -31,6 +31,7 @@ import {
   date,
   levels,
   ranks,
+  ratingClasses,
   roleNames,
   sexNames,
   today,
@@ -1412,7 +1413,7 @@ export function Settings() {
   const evsk = useData("/evsk-rules");
   const action = useAction();
   const [tab, setTab] = useState("rules");
-  const [type, setType] = useState("");
+  const [type, setType] = useState({ name: "", rating_class: "main" });
   const [deadline, setDeadline] = useState({
     title: "",
     due_on: today(),
@@ -1476,19 +1477,26 @@ export function Settings() {
               <div className="tag-stack">
                 {meta.data?.types.map((t: any) => (
                   <span className="tag" key={t.id}>
-                    {t.name}
+                    {t.name} · {ratingClasses[t.rating_class].toLowerCase()}
                   </span>
                 ))}
               </div>
+              <p className="inline-note">
+                Уровень для рейтинга вычисляется из статуса и класса типа:
+                всероссийские основного класса (чемпионат, кубок) дают
+                «Чемпионат России», первенства — «Первенство России», прочие —
+                межрегиональный. Региональные и межрегиональные идут по своему
+                статусу.
+              </p>
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   try {
                     await action.mutateAsync({
                       url: "/competition-types",
-                      data: { name: type },
+                      data: type,
                     });
-                    setType("");
+                    setType({ ...type, name: "" });
                   } catch {}
                 }}
               >
@@ -1496,9 +1504,23 @@ export function Settings() {
                   <input
                     required
                     minLength={2}
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
+                    value={type.name}
+                    onChange={(e) => setType({ ...type, name: e.target.value })}
                   />
+                </Field>
+                <Field label="Класс для рейтинга">
+                  <select
+                    value={type.rating_class}
+                    onChange={(e) =>
+                      setType({ ...type, rating_class: e.target.value })
+                    }
+                  >
+                    {Object.entries(ratingClasses).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
                 <Button disabled={action.isPending}>Добавить тип</Button>
               </form>

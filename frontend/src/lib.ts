@@ -45,11 +45,22 @@ export const stateNames: Record<string, string> = {
   paused: "Приостановлена",
   ended: "Завершена",
 };
-export const levels: Record<string, string> = {
+export const statuses: Record<string, string> = {
   regional: "Региональное",
   interregional: "Межрегиональное",
+  national: "Всероссийское",
+};
+// rating levels: derived on the backend from status + rating class of the type
+export const levels: Record<string, string> = {
+  regional: "Региональный",
+  interregional: "Межрегиональный",
   russian_championship: "Чемпионат России",
   russian_junior: "Первенство России",
+};
+export const ratingClasses: Record<string, string> = {
+  main: "Основной",
+  junior: "Юниорский",
+  other: "Прочий",
 };
 export const formats: Record<string, string> = {
   onsite: "Очно",

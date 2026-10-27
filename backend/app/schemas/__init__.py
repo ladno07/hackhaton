@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_vali
 
 RoleName = Literal["admin", "athlete", "coach", "judge"]
 Level = Literal["regional", "interregional", "russian_championship", "russian_junior"]
+Status = Literal["regional", "interregional", "national"]
+RatingClass = Literal["main", "junior", "other"]
 Sex = Literal["male", "female"]
 
 
@@ -55,7 +57,7 @@ class CompetitionIn(Strict):
     deadline: date
     location: str = Field(min_length=2, max_length=200)
     format: Literal["onsite", "online", "hybrid"]
-    level: Level
+    status: Status
     min_age: int = Field(0, ge=0, le=100)
     max_age: int = Field(100, ge=0, le=100)
     age_group_ids: list[int] = Field(default_factory=list, max_length=20)
@@ -71,9 +73,9 @@ class CompetitionIn(Strict):
             or self.min_age > self.max_age
         ):
             raise ValueError("Проверьте даты и возрастные ограничения")
-        expected = "Оренбургская область" if self.level == "regional" else "ЕКП"
+        expected = "Оренбургская область" if self.status == "regional" else "ЕКП"
         if self.calendar_plan != expected:
-            raise ValueError(f"Для выбранного уровня календарный план: {expected}")
+            raise ValueError(f"Для выбранного статуса календарный план: {expected}")
         return self
 
 
@@ -200,6 +202,10 @@ class OrganizationIn(Strict):
 
 class NameIn(Strict):
     name: str = Field(min_length=2, max_length=100)
+
+
+class CompetitionTypeIn(NameIn):
+    rating_class: RatingClass = "other"
 
 
 class RolesIn(Strict):

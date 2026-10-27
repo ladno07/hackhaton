@@ -2200,7 +2200,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NameIn"
+                "$ref": "#/components/schemas/CompetitionTypeIn"
               }
             }
           }
@@ -4373,15 +4373,14 @@
             ],
             "title": "Format"
           },
-          "level": {
+          "status": {
             "type": "string",
             "enum": [
               "regional",
               "interregional",
-              "russian_championship",
-              "russian_junior"
+              "national"
             ],
-            "title": "Level"
+            "title": "Status"
           },
           "min_age": {
             "type": "integer",
@@ -4443,11 +4442,37 @@
           "deadline",
           "location",
           "format",
-          "level",
+          "status",
           "calendar_plan",
           "calendar_number"
         ],
         "title": "CompetitionIn"
+      },
+      "CompetitionTypeIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Name"
+          },
+          "rating_class": {
+            "type": "string",
+            "enum": [
+              "main",
+              "junior",
+              "other"
+            ],
+            "title": "Rating Class",
+            "default": "other"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompetitionTypeIn"
       },
       "DeadlineIn": {
         "properties": {
@@ -4676,22 +4701,6 @@
           "password"
         ],
         "title": "Login"
-      },
-      "NameIn": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2,
-            "title": "Name"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "NameIn"
       },
       "OrganizationIn": {
         "properties": {
