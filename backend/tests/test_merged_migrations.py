@@ -44,6 +44,8 @@ def test_merged_migration_upgrade(tmp_path, source):
         "login_sessions",
         "development_indicators",
         "indicator_documents",
+        "governor_award_rules",
+        "governor_awards",
     }
     for name, table in Base.metadata.tables.items():
         if name not in added:
@@ -108,7 +110,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalars().all() == ["0013"]
+        ).scalars().all() == ["0014"]
         tables = set(inspect(conn).get_table_names())
         assert {
             "athlete_organizations",
@@ -117,6 +119,8 @@ def test_merged_migration_upgrade(tmp_path, source):
             "login_sessions",
             "development_indicators",
             "indicator_documents",
+            "governor_award_rules",
+            "governor_awards",
         } <= tables
         assert not compare_metadata(MigrationContext.configure(conn), Base.metadata)
         assert (

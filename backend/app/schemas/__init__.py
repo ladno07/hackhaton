@@ -363,3 +363,15 @@ class IndicatorIn(Strict):
         if self.year > date.today().year:
             raise ValueError("Показатель не может относиться к будущему году")
         return self
+
+
+class AwardRuleIn(Strict):
+    first: int = Field(ge=0, le=10_000_000)
+    second: int = Field(ge=0, le=10_000_000)
+    third: int = Field(ge=0, le=10_000_000)
+
+
+class AwardStatusIn(Strict):
+    status: Literal["candidate", "nominated", "awarded", "rejected"]
+    comment: str = Field("", max_length=2000)
+    order_number: str | None = Field(None, max_length=120)
