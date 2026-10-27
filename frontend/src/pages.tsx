@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { CoachChat } from "./coach-chat";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -29,7 +30,7 @@ import { chartColors, date, download, formats, roleNames, sexNames, today } from
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
-import { TelegramConnection, TelegramDeliveryStatus } from "./telegram";
+import { TelegramConnection } from "./telegram";
 import {
   Badge,
   Empty,
@@ -383,6 +384,11 @@ export function Overview() {
             <h2>Следующий шаг в вашем сезоне</h2>
             <p>Проверьте профиль, результаты и сроки действия квалификации.</p>
           </div>
+          {role === "athlete" && (
+            <Link className="btn btn-outline" to="/coaching">
+              Чаты с тренерами <ArrowRight size={16} />
+            </Link>
+          )}
           <Link
             className="btn btn-outline"
             to={
@@ -874,6 +880,8 @@ function AthleteProfile({ user }: any) {
 
 export function Coaching() {
   const { role } = useAuth();
+  const [search, setSearch] = useSearchParams();
+  const chatId = Number(search.get("chat"));
   const q = useData("/links");
   const athletes = useData("/athletes", role === "coach");
   const meta = useData("/metadata");
@@ -884,8 +892,10 @@ export function Coaching() {
   return (
     <>
       <PageTitle
-        title={role === "coach" ? "Мои спортсмены" : "Связи с тренерами"}
-        description="Привязка действует только после подтверждения спортсменом. История изменений сохраняется."
+        title={role === "coach" ? "Связь со спортсменами" : "Связи с тренерами"}
+        description={role === "athlete"
+          ? "Подтвердите заявку тренера — первым действием в строке появится чат с ним."
+          : "Привязка действует только после подтверждения спортсменом. История изменений сохраняется."}
       >
         {role === "coach" && (
           <Button onClick={() => setShow(true)}>
@@ -934,6 +944,11 @@ export function Coaching() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      {["athlete", "coach"].includes(role) && l.status === "active" && (
+                        <Button size="sm" variant="outline" onClick={() => setSearch({ chat: String(l.id) })}>
+                          Чат
+                        </Button>
+                      )}
                       {["coach", "admin"].includes(role) &&
                         l.status === "active" && (
                           <Button size="sm" variant="outline" asChild>
@@ -958,7 +973,7 @@ export function Coaching() {
                                 method: "patch",
                                 url: "/links/" + l.id,
                                 data: { status: "active" },
-                              })
+                              }, { onSuccess: () => setSearch({ chat: String(l.id) }) })
                             }
                           >
                             Подтвердить
@@ -1001,12 +1016,15 @@ export function Coaching() {
             </Table>
           ) : (
             <Empty
-              text="Связей со спортсменами пока нет"
+              text={role === "athlete" ? "Связей с тренерами пока нет" : "Связей со спортсменами пока нет"}
               hint="Тренер отправляет запрос; спортсмен подтверждает его в своём кабинете."
             />
           )}
         </State>
       </section>
+      {chatId > 0 && ["athlete", "coach"].includes(role) && (
+        <CoachChat key={`${role}-${chatId}`} linkId={chatId} onClose={() => setSearch({})} />
+      )}
       <Dialog open={show} onOpenChange={setShow} title="Запрос на привязку">
         <form
           onSubmit={async (e) => {
@@ -1088,13 +1106,12 @@ export function Notifications() {
                     </Link>
                   )}
                   <small>
-                    {date(n.created_at)} ·{" "}
-                    {n.mailed_at
-                      ? "Отправлено на почту"
-                      : n.last_error
-                        ? "Ошибка отправки; повторим автоматически"
-                        : "В очереди на отправку"}
-                    {role !== "ministry" && <TelegramDeliveryStatus delivery={n.telegram_delivery} />}
+                    <time dateTime={n.created_at}>
+                      {new Date(n.created_at).toLocaleString("ru-RU", {
+                        day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </time>
                   </small>
                 </div>
                 {!n.read_at && (

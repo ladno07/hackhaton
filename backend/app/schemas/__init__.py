@@ -10,6 +10,11 @@ RatingClass = Literal["main", "junior", "other"]
 Sex = Literal["male", "female"]
 
 
+class CoachChatMessageIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    body: str = Field(min_length=1, max_length=4000)
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

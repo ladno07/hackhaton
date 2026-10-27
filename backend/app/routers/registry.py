@@ -8,13 +8,14 @@ from app.schemas import (
     ProfileIn,
     LinkIn,
     LinkState,
+    CoachChatMessageIn,
     OrganizationIn,
     RolesIn,
     SuspensionIn,
 )
 from app.security import Actor, current_actor, allow
 from app.services.common import *
-from app.services.notifications import notify
+from app.services.notifications import notify, link_change_content
 from app.services.path import personal_path
 from app.services.ratings import rating_levels
 from app.services.athlete_ids import public_athlete_id
@@ -267,6 +268,8 @@ def links(
             "athlete": db.get(Athlete, x.athlete_id).user.full_name,
             "athlete_public_id": public_athlete_id(x.athlete_id),
             "coach": db.get(Coach, x.coach_id).user.full_name,
+            "athlete_sex": db.get(Athlete, x.athlete_id).user.sex,
+            "coach_sex": db.get(Coach, x.coach_id).user.sex,
             "history": [
                 row(h)
                 for h in db.scalars(
@@ -331,14 +334,54 @@ def change_link(
     link.status = data.status
     db.add(LinkHistory(link_id=link.id, actor_id=actor.user.id, status=data.status))
     audit(db, actor, "Изменение связи с тренером", link, {"status": data.status})
-    notify(
-        db,
-        [athlete.user_id, coach.user_id],
-        "Связь с тренером изменена",
-        data.status,
-        f"link-change:{link.id}:{now().isoformat()}",
-    )
+    key = f"link-change:{link.id}:{now().isoformat()}"
+    for user_id, recipient_role in ((athlete.user_id, "athlete"), (coach.user_id, "coach")):
+        title, body = link_change_content(db, link, data.status, recipient_role)
+        notify(db, [user_id], title, body, key)
     return row(link)
+
+
+def chat_link(db, actor, link_id):
+    link = require(db, AthleteCoach, link_id)
+    athlete = require(db, Athlete, link.athlete_id)
+    coach = require(db, Coach, link.coach_id)
+    if not ((actor.role == "athlete" and athlete.user_id == actor.user.id)
+            or (actor.role == "coach" and coach.user_id == actor.user.id)):
+        raise HTTPException(403, "Чат доступен только спортсмену и его тренеру")
+    if link.status != "active" or coach.archived_at:
+        raise HTTPException(409, "Чат доступен только при активной подтверждённой связи")
+    return link, athlete, coach
+
+
+@router.get("/links/{link_id}/messages")
+def chat_messages(link_id: int, before: int | None = None,
+                  actor: Actor = Depends(allow("athlete", "coach")),
+                  db: Session = Depends(get_db)):
+    chat_link(db, actor, link_id)
+    query = select(CoachChatMessage).where(CoachChatMessage.link_id == link_id)
+    if before is not None:
+        query = query.where(CoachChatMessage.id < before)
+    return [row(m) for m in db.scalars(query.order_by(CoachChatMessage.id.desc()).limit(100))]
+
+
+@router.post("/links/{link_id}/messages", status_code=201)
+def send_chat_message(link_id: int, data: CoachChatMessageIn,
+                      actor: Actor = Depends(allow("athlete", "coach")),
+                      db: Session = Depends(get_db)):
+    link, athlete, coach = chat_link(db, actor, link_id)
+    message = CoachChatMessage(link_id=link.id, sender_id=actor.user.id,
+                               sender_role=actor.role, body=data.body)
+    db.add(message)
+    db.flush()
+    recipient = athlete.user_id if actor.role == "coach" else coach.user_id
+    key = f"coach-chat:{message.id}"
+    notify(db, [recipient], "Новое сообщение от тренера" if actor.role == "coach"
+           else "Новое сообщение от спортсмена", f"{actor.user.full_name}\n{message.body}", key)
+    notice = db.scalar(select(Notification).where(Notification.user_id == recipient,
+                                                   Notification.event_key == key))
+    notice.telegram_context = {"roles": ["athlete" if actor.role == "coach" else "coach"],
+                               "path": f"/coaching?chat={link.id}"}
+    return row(message)
 
 
 @router.get("/users")

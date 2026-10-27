@@ -9,6 +9,25 @@ from app.models import LoginSession, now
 LOGIN = {"email": "athlete@demo.example", "password": "DemoPass2026!"}
 
 
+@pytest.mark.parametrize("origin", [
+    "http://localhost:8080", "http://127.0.0.1:8080",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+])
+def test_local_browser_origins_support_entire_session(env, origin):
+    client, _, _, _ = env
+    headers = {"Origin": origin, "Sec-Fetch-Site": "same-origin"}
+    assert client.post("/api/auth/login", json=LOGIN, headers=headers).status_code == 200
+    assert client.post("/api/auth/refresh", headers=headers).status_code == 200
+    assert client.post("/api/auth/logout", headers=headers).status_code == 204
+    assert client.post("/api/auth/refresh", headers=headers).status_code == 401
+
+
+@pytest.mark.parametrize("origin", ["http://127.0.0.1:8081", "http://127.0.0.1.attacker.example:8080"])
+def test_unconfigured_origins_still_rejected(env, origin):
+    client, _, _, _ = env
+    assert client.post("/api/auth/login", json=LOGIN, headers={"Origin": origin}).status_code == 403
+
+
 def test_browser_session_restores_and_logout_revokes(env):
     client, factory, _, users = env
     response = client.post("/api/auth/login", json=LOGIN)

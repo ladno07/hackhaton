@@ -414,7 +414,12 @@ function Layout() {
       </div>
     );
   const unread = (notices.data || []).filter((n: any) => !n.read_at).length;
-  const current = navigation.find((n) =>
+  const roleNavigation = navigation.map((item) =>
+    item.to === "/coaching" && auth.role === "coach"
+      ? { ...item, label: "Связь со спортсменами" }
+      : item,
+  );
+  const current = roleNavigation.find((n) =>
     n.to === "/"
       ? location.pathname === "/"
       : location.pathname.startsWith(n.to),
@@ -433,7 +438,7 @@ function Layout() {
         </div>
         <div className="nav-caption">РАБОЧЕЕ ПРОСТРАНСТВО</div>
         <nav>
-          {navigation
+          {roleNavigation
             .filter((n) => n.roles.includes(auth.role))
             .map((n) => (
               <NavLink

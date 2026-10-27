@@ -3324,3 +3324,104 @@ td a:hover {
     grid-template-columns: 1fr;
   }
 }
+/* Athlete–coach conversation */
+.coach-chat-history { position: relative; height: min(45vh, 440px); min-height: 140px; }
+.coach-chat-messages { height: 100%; overflow-y: auto; padding: 12px 18px 12px 4px; scrollbar-width: none; }
+.coach-chat-messages::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.coach-chat-content { display: flex; flex-direction: column; gap: 12px; }
+.coach-chat-day { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0; }
+.coach-chat-day::before, .coach-chat-day::after { content: ""; height: 1px; flex: 1; background: var(--color-border); }
+.coach-chat-day span, .coach-chat-floating-date { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); }
+.coach-chat-floating-date {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  box-shadow: 0 2px 8px #0000000d;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.coach-chat-floating-date, .coach-chat-scrollbar {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 220ms ease, visibility 0s linear 220ms;
+}
+.coach-chat-floating-date.is-visible, .coach-chat-scrollbar.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.coach-chat-scrollbar {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 8px;
+  width: 12px;
+  cursor: pointer;
+  touch-action: none;
+}
+.coach-chat-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  right: 3px;
+  width: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--scrollbar-thumb);
+}
+.coach-chat-scrollbar:hover .coach-chat-scrollbar-thumb { background: var(--scrollbar-thumb-hover); }
+@media (prefers-reduced-motion: reduce) {
+  .coach-chat-floating-date, .coach-chat-scrollbar { transition: none; }
+}
+.coach-chat-message { align-self: flex-start; max-width: 85%; padding: 12px 16px; border-radius: 12px; background: #f3f3f6; }
+.coach-chat-own { align-self: flex-end; background: #eeebff; }
+.coach-chat-message p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.coach-chat-message small { color: #626271; }
+.coach-chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+  margin-top: 16px;
+}
+.coach-chat-composer textarea {
+  display: block;
+  flex: 1 1 0%;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  max-height: 120px;
+  box-sizing: border-box;
+  padding: 11px 16px;
+  border-radius: 24px;
+  line-height: 24px;
+  resize: none;
+  overflow-y: hidden;
+  overflow-wrap: anywhere;
+}
+.coach-chat-composer textarea {
+  scrollbar-width: none;
+}
+.coach-chat-composer textarea::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.coach-chat-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: white;
+}
+.coach-chat-send:hover:not(:disabled) { background: var(--color-accent-hover); }

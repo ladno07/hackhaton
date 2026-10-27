@@ -16,6 +16,23 @@ from app.services.telegram_link import utc
 logger = logging.getLogger(__name__)
 
 
+def link_change_content(db, link, status, recipient_role):
+    title = {
+        "active": "Связь подтверждена",
+        "paused": "Связь приостановлена",
+        "ended": "Связь завершена",
+    }[status]
+    discipline = db.get(Discipline, link.discipline_id)
+    if recipient_role == "coach":
+        athlete = db.get(Athlete, link.athlete_id)
+        participant = f"Спортсмен: {athlete.user.full_name}"
+    else:
+        coach = db.get(Coach, link.coach_id)
+        participant = f"Тренер: {coach.user.full_name}"
+    body = f"{participant}\nНаправление: {discipline.short_name}"
+    return title, body
+
+
 def is_registration_notice(notice):
     parts = notice.event_key.split(":")
     return parts[0] == "competition-open" or parts[:2] in (
@@ -195,6 +212,17 @@ MINISTRY_EVENTS = {"competition-open", "competition-regulation"}
 def visible_in_role(db, actor, notice):
     """Account ownership is checked by the router; this additionally scopes role-specific events."""
     parts = notice.event_key.split(":")
+    if parts[0] == "coach-chat":
+        message = db.get(CoachChatMessage, int(parts[1]))
+        link = db.get(AthleteCoach, message.link_id) if message else None
+        athlete = db.get(Athlete, link.athlete_id) if link else None
+        coach = db.get(Coach, link.coach_id) if link else None
+        if not link or link.status != "active" or coach.archived_at:
+            return False
+        return ((actor.role == "athlete" and message.sender_role == "coach"
+                 and actor.user.id == notice.user_id == athlete.user_id)
+                or (actor.role == "coach" and message.sender_role == "athlete"
+                    and actor.user.id == notice.user_id == coach.user_id))
     if actor.role == "ministry":
         return parts[0] in MINISTRY_EVENTS or notice.event_key.startswith("deadline:comp:")
     if is_registration_notice(notice):
