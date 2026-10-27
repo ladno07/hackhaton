@@ -1015,3 +1015,178 @@ def test_protocol_correction_creates_version(env):
         ).status_code
         == 404
     )
+
+
+def card(**overrides):
+    payload = dict(
+        full_name="Тестовый Тренер",
+        sex="female",
+        birth_date="1985-04-12",
+        municipality="Орск",
+        phone="+7 (900) 123-45-67",
+        contact_email="contact@example.com",
+        qualification="Высшая категория",
+        experience_since=2010,
+        about="Работает с юниорами",
+        discipline_ids=[1, 2],
+    )
+    payload.update(overrides)
+    return payload
+
+
+def test_staff_card_create(env):
+    client, _, h, u = env
+    data = card(email="new.coach@example.com", password="StrongPass2026")
+    res = client.post("/api/coaches", headers=h["admin"], json=data)
+    assert res.status_code == 201, res.text
+    created = res.json()
+    assert created["discipline_ids"] == [1, 2]
+    assert created["phone"] == data["phone"]
+    assert client.post("/api/coaches", headers=h["admin"], json=data).status_code == 409
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "new.coach@example.com", "password": "StrongPass2026"},
+    )
+    assert login.status_code == 200, login.text
+    assert login.json()["user"]["coach_id"] == created["id"]
+    no_password = card(email="nobody@example.com")
+    res = client.post("/api/judges", headers=h["admin"], json=no_password)
+    assert res.status_code == 422
+    # an existing user gets the role and the card, the password stays as is
+    existing = card(email=u["athlete"]["email"])
+    res = client.post("/api/judges", headers=h["admin"], json=existing)
+    assert res.status_code == 201, res.text
+    roles = client.get("/api/users", headers=h["admin"]).json()
+    assert "judge" in next(x for x in roles if x["id"] == u["athlete"]["id"])["roles"]
+    assert (
+        client.post("/api/coaches", headers=h["coach"], json=data).status_code == 403
+    )
+
+
+def test_staff_card_edit_and_privacy(env):
+    client, _, h, u = env
+    cid = u["coach"]["coach_id"]
+    res = client.put(f"/api/coaches/{cid}", headers=h["coach"], json=card())
+    assert res.status_code == 200, res.text
+    assert res.json()["municipality"] == "Орск"
+    other = client.post(
+        "/api/coaches",
+        headers=h["admin"],
+        json=card(email="other@example.com", password="StrongPass2026"),
+    ).json()
+    assert (
+        client.put(
+            f"/api/coaches/{other['id']}", headers=h["coach"], json=card()
+        ).status_code
+        == 403
+    )
+    assert (
+        client.put(f"/api/coaches/{cid}", headers=h["athlete"], json=card()).status_code
+        == 403
+    )
+    assert (
+        client.put(
+            f"/api/coaches/{cid}",
+            headers=h["coach"],
+            json=card(archived_at="2026-01-01T00:00:00Z"),
+        ).status_code
+        == 422
+    )
+    assert (
+        client.put(
+            f"/api/coaches/{cid}", headers=h["coach"], json=card(birth_date="2015-01-01")
+        ).status_code
+        == 422
+    )
+    seen = client.get(f"/api/coaches/{cid}", headers=h["athlete"]).json()
+    assert "phone" not in seen and "email" not in seen
+    assert client.get(f"/api/coaches/{cid}", headers=h["coach"]).json()["phone"]
+    assert client.get(f"/api/coaches/{cid}", headers=h["admin"]).json()["phone"]
+
+
+def test_coach_archive_and_restore(env):
+    client, factory, h, u = env
+    cid = u["coach"]["coach_id"]
+    aid = u["athlete"]["athlete_id"]
+    own_link = client.post(
+        "/api/links", headers=h["coach"], json={"athlete_id": aid, "discipline_id": 1}
+    ).json()["id"]
+    client.patch(f"/api/links/{own_link}", headers=h["athlete"], json={"status": "active"})
+    with factory() as db:
+        active = db.scalars(
+            select(AthleteCoach).where(
+                AthleteCoach.coach_id == cid, AthleteCoach.status == "active"
+            )
+        ).all()
+        assert active
+        active_ids = [x.id for x in active]
+        assert own_link in active_ids
+    res = client.post(
+        f"/api/coaches/{cid}/archive", headers=h["admin"], json={"reason": "Уволилась"}
+    )
+    assert res.status_code == 200, res.text
+    assert (
+        client.post(
+            f"/api/coaches/{cid}/archive", headers=h["admin"], json={"reason": "Ещё"}
+        ).status_code
+        == 409
+    )
+    with factory() as db:
+        assert {db.get(AthleteCoach, i).status for i in active_ids} == {"paused"}
+    listed = client.get("/api/coaches", headers=h["admin"]).json()
+    assert cid not in [c["id"] for c in listed]
+    archive = client.get("/api/coaches?archived=true", headers=h["admin"]).json()
+    assert cid in [c["id"] for c in archive]
+    assert client.get("/api/coaches?archived=true", headers=h["coach"]).status_code == 403
+    assert client.get(f"/api/coaches/{cid}", headers=h["athlete"]).status_code == 404
+    assert client.get(f"/api/coaches/{cid}", headers=h["coach"]).status_code == 200
+    assert (
+        client.put(f"/api/coaches/{cid}", headers=h["coach"], json=card()).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            "/api/links", headers=h["coach"], json={"athlete_id": aid, "discipline_id": 2}
+        ).status_code
+        == 409
+    )
+    assert (
+        client.patch(
+            f"/api/links/{own_link}", headers=h["athlete"], json={"status": "active"}
+        ).status_code
+        == 409
+    )
+    res = client.post(f"/api/coaches/{cid}/restore", headers=h["admin"])
+    assert res.status_code == 200, res.text
+    assert res.json()["archived_at"] is None
+    assert cid in [c["id"] for c in client.get("/api/coaches", headers=h["admin"]).json()]
+
+
+def test_judge_archive_blocks_assignment(env):
+    client, _, h, u = env
+    jid = u["judge"]["judge_id"]
+    comp = open_comp(client, h["admin"])
+    res = client.post(
+        f"/api/judges/{jid}/archive", headers=h["admin"], json={"reason": "Переезд"}
+    )
+    assert res.status_code == 200, res.text
+    assert jid not in [j["id"] for j in client.get("/api/judges", headers=h["admin"]).json()]
+    res = client.post(
+        f"/api/competitions/{comp['id']}/judges",
+        headers=h["admin"],
+        json={"judge_id": jid, "position": "Главный судья"},
+    )
+    assert res.status_code == 409
+    res = client.post(
+        "/api/rank-applications",
+        headers=h["judge"],
+        json={"name": "Судья первой категории"},
+    )
+    assert res.status_code == 409
+    client.post(f"/api/judges/{jid}/restore", headers=h["admin"])
+    res = client.post(
+        f"/api/competitions/{comp['id']}/judges",
+        headers=h["admin"],
+        json={"judge_id": jid, "position": "Главный судья"},
+    )
+    assert res.status_code == 201, res.text

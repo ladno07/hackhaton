@@ -182,35 +182,6 @@ def suspension(
     return row(athlete)
 
 
-@router.get("/coaches")
-def coaches(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
-    return [
-        {
-            "id": c.id,
-            "full_name": c.user.full_name,
-            "organization_id": c.organization_id,
-        }
-        for c in db.scalars(select(Coach))
-    ]
-
-
-@router.get("/judges")
-def judges(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
-    return [
-        {
-            "id": j.id,
-            "full_name": j.user.full_name,
-            "categories": [
-                row(c)
-                for c in db.scalars(
-                    select(JudgeCategory).where(JudgeCategory.judge_id == j.id)
-                )
-            ],
-        }
-        for j in db.scalars(select(Judge))
-    ]
-
-
 @router.post("/organizations", status_code=201)
 def add_organization(
     data: OrganizationIn,
@@ -269,11 +240,11 @@ def links(
 def request_link(
     data: LinkIn, actor: Actor = Depends(allow("coach")), db: Session = Depends(get_db)
 ):
+    coach = active_card(db, Coach, actor)
     athlete = require(db, Athlete, data.athlete_id)
     require(db, Discipline, data.discipline_id)
     if not db.get(AthleteDiscipline, (athlete.id, data.discipline_id)):
         raise HTTPException(422, "Спортсмен не занимается выбранной дисциплиной")
-    coach = own(db, Coach, actor)
     link = AthleteCoach(
         athlete_id=athlete.id, coach_id=coach.id, discipline_id=data.discipline_id
     )
@@ -309,6 +280,8 @@ def change_link(
         raise HTTPException(403, "Нет доступа к связи")
     if data.status == "active" and actor.role != "athlete":
         raise HTTPException(403, "Связь подтверждает только спортсмен")
+    if data.status == "active" and coach.archived_at:
+        raise HTTPException(409, "Тренер в архиве")
     if link.status == "ended" or (link.status == "pending" and data.status == "paused"):
         raise HTTPException(409, "Недопустимый переход статуса")
     link.status = data.status

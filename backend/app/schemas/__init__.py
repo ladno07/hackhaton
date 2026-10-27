@@ -162,6 +162,46 @@ class ProfileIn(Strict):
     disciplines: list[Enrollment]
 
 
+class StaffCardIn(Strict):
+    full_name: str = Field(min_length=3, max_length=200)
+    sex: Sex | None = None
+    birth_date: date
+    organization_id: int | None = None
+    municipality: str = Field(min_length=2, max_length=120)
+    phone: str | None = Field(None, max_length=30, pattern=r"^\+?[\d\s()\-]{5,30}$")
+    contact_email: EmailStr | None = None
+    qualification: str | None = Field(None, max_length=200)
+    experience_since: int | None = Field(None, ge=1950)
+    about: str | None = Field(None, max_length=2000)
+    discipline_ids: list[int] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def staff_check(self):
+        today = date.today()
+        age = (
+            today.year
+            - self.birth_date.year
+            - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
+        )
+        if age < 18 or age > 110:
+            raise ValueError("Тренер и судья — от 18 лет, проверьте дату рождения")
+        if self.experience_since and self.experience_since > today.year:
+            raise ValueError("Год начала стажа в будущем")
+        if len(set(self.discipline_ids)) != len(self.discipline_ids):
+            raise ValueError("Дисциплина указана дважды")
+        return self
+
+
+class StaffCreate(StaffCardIn):
+    email: EmailStr
+    # required only when no user with this email exists yet
+    password: str | None = Field(None, min_length=10, max_length=128)
+
+
+class ArchiveIn(Strict):
+    reason: str = Field(min_length=3, max_length=2000)
+
+
 class RankIn(Strict):
     athlete_id: int | None = None
     result_id: int | None = None

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  Archive,
+  ArchiveRestore,
   ArrowUpRight,
   Check,
   ChevronDown,
@@ -50,6 +52,7 @@ import {
   Table,
 } from "./components/shared";
 import { ProfileEditor } from "./pages";
+import { ArchiveForm, StaffEditor, staffKinds } from "./staff";
 
 export function Registry() {
   const { role } = useAuth();
@@ -63,6 +66,9 @@ export function Registry() {
   const [editing, setEditing] = useState<any>(null);
   const [orgEdit, setOrgEdit] = useState<any>(null);
   const [suspension, setSuspension] = useState<any>(null);
+  const [archived, setArchived] = useState(false);
+  const [staffEdit, setStaffEdit] = useState<any>(null);
+  const [staffArchive, setStaffArchive] = useState<any>(null);
   const meta = useData("/metadata");
   const ath = useData(
     "/athletes?" +
@@ -75,9 +81,13 @@ export function Registry() {
         max_age: maxAge,
       }),
   );
-  const coaches = useData("/coaches");
-  const judges = useData("/judges");
+  const staffQuery = archived ? "?archived=true" : "";
+  const coaches = useData("/coaches" + staffQuery);
+  const judges = useData("/judges" + staffQuery);
   const action = useAction();
+  const staffTab =
+    tab === "coaches" ? "coach" : tab === "judges" ? "judge" : "";
+  const staff = staffTab === "coach" ? coaches : judges;
   return (
     <>
       <PageTitle
@@ -94,6 +104,12 @@ export function Registry() {
             Добавить организацию
           </Button>
         )}
+        {role === "admin" && staffTab && (
+          <Button onClick={() => setStaffEdit({ kind: staffTab, card: {} })}>
+            <Plus size={16} />
+            {staffTab === "coach" ? "Добавить тренера" : "Добавить судью"}
+          </Button>
+        )}
       </PageTitle>
       <section className="panel">
         <div className="tabs">
@@ -106,7 +122,10 @@ export function Registry() {
             <button
               className={tab === k ? "active" : ""}
               key={k}
-              onClick={() => setTab(k)}
+              onClick={() => {
+                setTab(k);
+                setArchived(false);
+              }}
             >
               {t}
             </button>
@@ -114,6 +133,16 @@ export function Registry() {
         </div>
         <div className="toolbar">
           <SearchBox value={search} onChange={setSearch} />
+          {role === "admin" && staffTab && (
+            <label className="check-line">
+              <input
+                type="checkbox"
+                checked={archived}
+                onChange={(e) => setArchived(e.target.checked)}
+              />
+              Архив
+            </label>
+          )}
           {tab === "athletes" && (
             <>
               <select
@@ -260,23 +289,114 @@ export function Registry() {
             )}
           </State>
         )}
-        {tab === "coaches" && (
-          <State query={coaches}>
-            {coaches.data?.length ? (
-              <Table heads={["Тренер", "Организация"]}>
-                {coaches.data
+        {staffTab && (
+          <State query={staff}>
+            {staff.data?.length ? (
+              <Table
+                heads={[
+                  staffTab === "coach" ? "Тренер" : "Судья",
+                  "Организация / муниципалитет",
+                  "Дисциплины",
+                  staffTab === "coach" ? "Квалификация" : "Категория",
+                  role === "admin" ? "Действия" : "",
+                ]}
+              >
+                {staff.data
                   .filter((c: any) =>
                     c.full_name.toLowerCase().includes(search.toLowerCase()),
                   )
                   .map((c: any) => (
                     <tr key={c.id}>
                       <td>
-                        <strong>{c.full_name}</strong>
+                        <div className="person-cell">
+                          <span className="avatar avatar-soft">
+                            {c.full_name.replace("Демо · ", "").slice(0, 1)}
+                          </span>
+                          <div>
+                            <strong>
+                              {c.full_name.replace("Демо · ", "")}
+                            </strong>
+                            <small>
+                              {c.experience_since
+                                ? "Стаж с " + c.experience_since + " · "
+                                : ""}
+                              ID {c.id}
+                            </small>
+                          </div>
+                        </div>
                       </td>
                       <td>
-                        {meta.data?.organizations.find(
-                          (o: any) => o.id === c.organization_id,
-                        )?.name || "Без организации"}
+                        {c.organization}
+                        <small>{c.municipality}</small>
+                      </td>
+                      <td>
+                        <div className="tag-stack">
+                          {c.discipline_ids.map((id: number) => (
+                            <span key={id} className="tag">
+                              {
+                                meta.data?.disciplines.find(
+                                  (x: any) => x.id === id,
+                                )?.short_name
+                              }
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        {staffTab === "judge"
+                          ? c.categories.map((k: any) => (
+                              <small key={k.id}>
+                                {k.name} · до {date(k.expires_on)}
+                              </small>
+                            ))
+                          : c.qualification || "—"}
+                        {c.archived_at && (
+                          <>
+                            <Badge value="rejected" label="В архиве" />
+                            <small>{c.archive_reason}</small>
+                          </>
+                        )}
+                      </td>
+                      <td>
+                        {role === "admin" && (
+                          <div className="row-actions">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setStaffEdit({ kind: staffTab, card: c })
+                              }
+                            >
+                              Карточка
+                            </Button>
+                            {c.archived_at ? (
+                              <button
+                                className="icon-btn"
+                                aria-label={"Восстановить: " + c.full_name}
+                                title="Восстановить из архива"
+                                disabled={action.isPending}
+                                onClick={() =>
+                                  action.mutate({
+                                    url: `${staffKinds[staffTab].url}/${c.id}/restore`,
+                                  })
+                                }
+                              >
+                                <ArchiveRestore size={16} />
+                              </button>
+                            ) : (
+                              <button
+                                className="icon-btn"
+                                aria-label={"В архив: " + c.full_name}
+                                title="В архив"
+                                onClick={() =>
+                                  setStaffArchive({ kind: staffTab, card: c })
+                                }
+                              >
+                                <Archive size={16} />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -284,33 +404,6 @@ export function Registry() {
             ) : (
               <Empty />
             )}
-          </State>
-        )}
-        {tab === "judges" && (
-          <State query={judges}>
-            <Table heads={["Судья", "Категория", "Срок действия"]}>
-              {judges.data
-                ?.filter((j: any) =>
-                  j.full_name.toLowerCase().includes(search.toLowerCase()),
-                )
-                .map((j: any) => (
-                  <tr key={j.id}>
-                    <td>
-                      <strong>{j.full_name}</strong>
-                    </td>
-                    <td>
-                      {j.categories.map((c: any) => (
-                        <small key={c.id}>{c.name}</small>
-                      ))}
-                    </td>
-                    <td>
-                      {j.categories.map((c: any) => (
-                        <small key={c.id}>{date(c.expires_on)}</small>
-                      ))}
-                    </td>
-                  </tr>
-                ))}
-            </Table>
           </State>
         )}
         {tab === "organizations" && (
@@ -352,6 +445,38 @@ export function Registry() {
       >
         {editing && (
           <ProfileEditor athlete={editing} onSaved={() => setEditing(null)} />
+        )}
+      </Dialog>
+      <Dialog
+        open={!!staffEdit}
+        onOpenChange={() => setStaffEdit(null)}
+        title={
+          staffEdit
+            ? (staffEdit.card.id ? "Карточка " : "Новая карточка ") +
+              staffKinds[staffEdit.kind].title
+            : ""
+        }
+        wide
+      >
+        {staffEdit && (
+          <StaffEditor
+            kind={staffEdit.kind}
+            card={staffEdit.card}
+            onSaved={() => setStaffEdit(null)}
+          />
+        )}
+      </Dialog>
+      <Dialog
+        open={!!staffArchive}
+        onOpenChange={() => setStaffArchive(null)}
+        title="Перенос в архив"
+      >
+        {staffArchive && (
+          <ArchiveForm
+            kind={staffArchive.kind}
+            card={staffArchive.card}
+            onDone={() => setStaffArchive(null)}
+          />
         )}
       </Dialog>
       <Dialog
@@ -1459,14 +1584,18 @@ export function Settings() {
               стабильности 1,2 применяется к сумме за дисциплину и сезон.
             </p>
             <State query={rules}>
-              {rules.data?.map((r: any) => <RuleEditor key={r.level} r={r} />)}
+              {rules.data?.map((r: any) => (
+                <RuleEditor key={r.level} r={r} />
+              ))}
             </State>
           </div>
         )}
         {tab === "users" && (
           <State query={users}>
             <Table heads={["Пользователь", "Доступные роли", ""]}>
-              {users.data?.map((u: any) => <UserRoles key={u.id} u={u} />)}
+              {users.data?.map((u: any) => (
+                <UserRoles key={u.id} u={u} />
+              ))}
             </Table>
           </State>
         )}

@@ -442,6 +442,8 @@ def assign_judge(
     judge = require(db, Judge, data.judge_id)
     if comp.state == "published":
         raise HTTPException(409, "Протокол уже опубликован")
+    if judge.archived_at:
+        raise HTTPException(409, "Судья в архиве")
     category = db.scalar(
         select(JudgeCategory).where(
             JudgeCategory.judge_id == judge.id,

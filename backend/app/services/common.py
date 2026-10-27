@@ -77,3 +77,10 @@ def visible_athletes(db, actor):
             ).all()
         )
     return set()
+
+
+def active_card(db, model, actor):
+    card = own(db, model, actor)
+    if card.archived_at:
+        raise HTTPException(409, "Карточка в архиве — действие недоступно")
+    return card
