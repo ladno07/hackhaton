@@ -1,5 +1,7 @@
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import PurePath
+from urllib.parse import quote
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db import get_db
@@ -20,6 +22,17 @@ from app.services.ratings import recalculate
 
 router = APIRouter(tags=["Соревнования"])
 
+REGULATION_MAX_SIZE = 10 * 1024 * 1024
+REGULATION_TYPES = {
+    ".pdf": ("application/pdf", (b"%PDF-",)),
+    ".docx": (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        (b"PK\x03\x04",),
+    ),
+    ".doc": ("application/msword", (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)),
+    ".odt": ("application/vnd.oasis.opendocument.text", (b"PK\x03\x04",)),
+}
+
 
 def locked(db, key):
     obj = db.scalar(select(Competition).where(Competition.id == key).with_for_update())
@@ -28,8 +41,16 @@ def locked(db, key):
     return obj
 
 
+def regulation_info(db, comp_id):
+    obj = db.get(CompetitionRegulation, comp_id)
+    if not obj:
+        return None
+    return {k: getattr(obj, k) for k in ("filename", "size", "uploaded_at")}
+
+
 def competition_view(db, comp, actor):
     data = row(comp)
+    data["regulation_file"] = regulation_info(db, comp.id)
     data["discipline"] = db.get(Discipline, comp.discipline_id).short_name
     data["participants"] = len(
         db.scalars(
@@ -193,6 +214,98 @@ def detail(
             for j in judges
         ],
     }
+
+
+@router.put("/competitions/{comp_id}/regulation")
+async def upload_regulation(
+    comp_id: int,
+    file: UploadFile = File(...),
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Положение нельзя заменить после публикации итогов")
+    name = PurePath((file.filename or "").replace("\\", "/")).name.strip()
+    ext = PurePath(name).suffix.lower()
+    if ext not in REGULATION_TYPES:
+        raise HTTPException(422, "Допустимые форматы положения: PDF, DOCX, DOC, ODT")
+    content = await file.read(REGULATION_MAX_SIZE + 1)
+    if not content:
+        raise HTTPException(422, "Файл пустой")
+    if len(content) > REGULATION_MAX_SIZE:
+        raise HTTPException(413, "Размер положения не должен превышать 10 МБ")
+    mime, signatures = REGULATION_TYPES[ext]
+    if not content.startswith(signatures):
+        raise HTTPException(422, "Содержимое файла не соответствует расширению")
+    obj = db.get(CompetitionRegulation, comp_id) or CompetitionRegulation(
+        competition_id=comp_id
+    )
+    obj.filename = name[-255:]
+    obj.content_type = mime
+    obj.size = len(content)
+    obj.data = content
+    obj.uploaded_by = actor.user.id
+    obj.uploaded_at = now()
+    db.add(obj)
+    comp.revision += 1
+    audit(
+        db,
+        actor,
+        "Загрузка положения",
+        comp,
+        {"filename": obj.filename, "size": obj.size},
+    )
+    if comp.state != "draft":
+        athlete_ids = db.scalars(
+            select(CompetitionApplication.athlete_id).where(
+                CompetitionApplication.competition_id == comp.id,
+                CompetitionApplication.status != "rejected",
+            )
+        ).all()
+        notify(
+            db,
+            [u for a in athlete_ids for u in athlete_audience(db, a)],
+            "Обновлено положение",
+            comp.title,
+            f"competition-regulation:{comp.id}:{comp.revision}",
+        )
+    return regulation_info(db, comp_id)
+
+
+@router.delete("/competitions/{comp_id}/regulation", status_code=204)
+def remove_regulation(
+    comp_id: int, actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db)
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Положение нельзя удалить после публикации итогов")
+    obj = require(db, CompetitionRegulation, comp_id)
+    audit(db, actor, "Удаление положения", comp, {"filename": obj.filename})
+    db.delete(obj)
+
+
+@router.get("/competitions/{comp_id}/regulation")
+def download_regulation(
+    comp_id: int, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)
+):
+    comp = require(db, Competition, comp_id)
+    if comp.state == "draft" and actor.role != "admin":
+        raise HTTPException(404, "Соревнование не найдено")
+    obj = db.get(CompetitionRegulation, comp_id)
+    if not obj:
+        raise HTTPException(404, "Положение не прикреплено")
+    fallback = f"regulation-{comp_id}{PurePath(obj.filename).suffix}"
+    return Response(
+        obj.data,
+        media_type=obj.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{fallback}"; '
+            f"filename*=UTF-8''{quote(obj.filename)}",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/competitions/{comp_id}/applications", status_code=201)

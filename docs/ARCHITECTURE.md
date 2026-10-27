@@ -6,7 +6,7 @@
 
 `organizations → athletes/coaches`. `athlete_disciplines` задаёт дисциплины и годы занятий. `athlete_coaches` связывает спортсмена, тренера и дисциплину; `link_history` хранит переходы статуса с автором и временем.
 
-`competitions → disciplines / competition_types`; в соревновании хранятся даты, возраст, формат, уровень, календарный план и номер, ссылка на положение. `competition_applications` уникальна по соревнованию и спортсмену. `competition_judges` хранит должности. `competition_results` уникальна по спортсмену/соревнованию и месту/соревнованию.
+`competitions → disciplines / competition_types`; в соревновании хранятся даты, возраст, формат, уровень, календарный план и номер, ссылка на положение. Файл положения хранится отдельно в `competition_regulations` (bytea, одна запись на соревнование, проверка расширения и сигнатуры, до 10 МБ); `PUT/DELETE/GET /api/competitions/{id}/regulation`. `competition_applications` уникальна по соревнованию и спортсмену. `competition_judges` хранит должности. `competition_results` уникальна по спортсмену/соревнованию и месту/соревнованию.
 
 `rank_applications` относится либо к спортсмену и его результату, либо к судье. Решение с приказом создаёт `sports_ranks` или `judge_categories`; история присвоений сохраняется. `evsk_rules` задаёт только предварительные условия подсветки с источником.
 

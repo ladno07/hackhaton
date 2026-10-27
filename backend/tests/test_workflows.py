@@ -548,3 +548,57 @@ def test_notifications_respect_active_role(env):
         client.patch(f"/api/notifications/{nid}/read", headers=switched).status_code
         == 403
     )
+
+
+def test_regulation_upload_and_download(env):
+    client, factory, h, users = env
+    comp = competition(client, h["admin"])
+    url = f"/api/competitions/{comp['id']}/regulation"
+    pdf = b"%PDF-1.4\n% demo regulation\n%%EOF"
+
+    def upload(name, content):
+        return client.put(
+            url, headers=h["admin"], files={"file": (name, content, "text/plain")}
+        )
+
+    assert upload("polozhenie.txt", b"hello").status_code == 422
+    assert upload("fake.pdf", b"PK\x03\x04zip").status_code == 422
+    assert upload("big.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024)).status_code == 413
+    assert (
+        client.put(
+            url, headers=h["athlete"], files={"file": ("a.pdf", pdf)}
+        ).status_code
+        == 403
+    )
+    res = upload("C:\\docs\\Положение турнира.pdf", pdf)
+    assert res.status_code == 200, res.text
+    assert res.json()["filename"] == "Положение турнира.pdf"
+    assert client.get(url, headers=h["athlete"]).status_code == 404
+    client.patch(
+        f"/api/competitions/{comp['id']}/state",
+        headers=h["admin"],
+        json={"state": "open"},
+    )
+    detail = client.get(f"/api/competitions/{comp['id']}", headers=h["athlete"])
+    assert detail.json()["regulation_file"]["size"] == len(pdf)
+    file = client.get(url, headers=h["athlete"])
+    assert file.status_code == 200
+    assert file.content == pdf
+    assert file.headers["content-type"] == "application/pdf"
+    assert "filename*=UTF-8''" in file.headers["content-disposition"]
+    assert client.delete(url, headers=h["admin"]).status_code == 204
+    assert client.get(url, headers=h["athlete"]).status_code == 404
+    assert (
+        client.get(f"/api/competitions/{comp['id']}", headers=h["athlete"]).json()[
+            "regulation_file"
+        ]
+        is None
+    )
+
+
+def test_demo_competitions_have_regulation(env):
+    client, factory, h, users = env
+    comps = client.get("/api/competitions?state=open", headers=h["athlete"]).json()
+    comp = next(c for c in comps if c["regulation_file"])
+    file = client.get(f"/api/competitions/{comp['id']}/regulation", headers=h["athlete"])
+    assert file.status_code == 200 and file.content.startswith(b"%PDF-")

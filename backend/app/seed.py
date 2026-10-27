@@ -10,6 +10,7 @@ from app.security import password_hash, Actor
 from app.services.common import audit, age_at
 from app.services.ratings import recalculate
 from app.services.notifications import notify
+from app.services.reports import export_document
 
 DISCIPLINES = [
     ("Программирование алгоритмическое", "Алгоритмы"),
@@ -238,29 +239,53 @@ def seed(demo=False):
         )
         for i in range(6):
             start = today + timedelta(days=10 + i * 6)
+            c = Competition(
+                title=[
+                    "Демо · Открытый кубок Оренбуржья",
+                    "Демо · Продуктовый хакатон",
+                    "Демо · Киберщит региона",
+                    "Демо · Интеллект на старте",
+                    "Демо · Робототехническая лига",
+                    "Демо · Беспилотный маршрут",
+                ][i],
+                discipline_id=i + 1,
+                type_id=3,
+                start_date=start,
+                end_date=start + timedelta(days=1),
+                deadline=start - timedelta(days=3),
+                location="Оренбург · Технопарк"
+                if i % 2 == 0
+                else "Онлайн-платформа",
+                format=["onsite", "online", "hybrid"][i % 3],
+                level="regional",
+                calendar_plan="Оренбургская область",
+                calendar_number=f"ДЕМО-{i + 10}",
+                state="open",
+            )
+            db.add(c)
+            db.flush()
+            pdf = export_document(
+                "Положение о проведении соревнования",
+                ["Раздел", "Содержание"],
+                [
+                    ["Наименование", c.title],
+                    ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
+                    ["Место", c.location],
+                    ["Участники", f"{c.min_age}–{c.max_age} лет на дату старта"],
+                    ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
+                    ["Документ", "Демонстрационный образец, не имеет силы"],
+                ],
+                "pdf",
+                c.calendar_number,
+            )
             db.add(
-                Competition(
-                    title=[
-                        "Демо · Открытый кубок Оренбуржья",
-                        "Демо · Продуктовый хакатон",
-                        "Демо · Киберщит региона",
-                        "Демо · Интеллект на старте",
-                        "Демо · Робототехническая лига",
-                        "Демо · Беспилотный маршрут",
-                    ][i],
-                    discipline_id=i + 1,
-                    type_id=3,
-                    start_date=start,
-                    end_date=start + timedelta(days=1),
-                    deadline=start - timedelta(days=3),
-                    location="Оренбург · Технопарк"
-                    if i % 2 == 0
-                    else "Онлайн-платформа",
-                    format=["onsite", "online", "hybrid"][i % 3],
-                    level="regional",
-                    calendar_plan="Оренбургская область",
-                    calendar_number=f"ДЕМО-{i + 10}",
-                    state="open",
+                CompetitionRegulation(
+                    competition_id=c.id,
+                    filename=f"Положение {c.calendar_number}.pdf",
+                    content_type="application/pdf",
+                    size=len(pdf),
+                    data=pdf,
+                    uploaded_by=admin.id,
                 )
             )
         db.add(

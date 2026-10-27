@@ -15,12 +15,14 @@ import {
   Plus,
   Send,
   Settings2,
+  Trash2,
   Trophy,
+  Upload,
   Users,
   X,
 } from "lucide-react";
-import { useAction, useAuth, useData } from "./state";
-import { date, formats, levels, today } from "./lib";
+import { useAction, useAuth, useData, useToast } from "./state";
+import { date, download, errorText, formats, levels, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -33,9 +35,121 @@ import {
   State,
   Table,
 } from "./components/shared";
+const REGULATION_ACCEPT = ".pdf,.docx,.doc,.odt";
+const REGULATION_MAX_MB = 10;
+const fileSize = (n: number) =>
+  n < 1024 * 1024
+    ? Math.max(1, Math.round(n / 1024)) + " КБ"
+    : (n / 1024 / 1024).toFixed(1).replace(".", ",") + " МБ";
+const regulationForm = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return form;
+};
+function tooBig(file: File | null) {
+  return !!file && file.size > REGULATION_MAX_MB * 1024 * 1024;
+}
+export function Regulation({ comp }: any) {
+  const { role } = useAuth();
+  const action = useAction();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const file = comp.regulation_file;
+  const editable = role === "admin" && comp.state !== "published";
+  return (
+    <div className="regulation">
+      {file ? (
+        <button
+          type="button"
+          className="text-link"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await download(
+                "/competitions/" + comp.id + "/regulation",
+                file.filename,
+              );
+            } catch (e) {
+              toast(errorText(e), true);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Download size={14} />
+          Скачать положение
+        </button>
+      ) : (
+        !comp.regulation_url && <strong>Не прикреплено</strong>
+      )}
+      {file && (
+        <small>
+          {file.filename} · {fileSize(file.size)} · {date(file.uploaded_at)}
+        </small>
+      )}
+      {comp.regulation_url && (
+        <a
+          href={comp.regulation_url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-link"
+        >
+          Открыть по ссылке <ArrowRight size={14} />
+        </a>
+      )}
+      {editable && (
+        <div className="row-actions">
+          <label className="text-link regulation-upload">
+            <Upload size={14} />
+            {file ? "Заменить файл" : "Загрузить файл"}
+            <input
+              type="file"
+              accept={REGULATION_ACCEPT}
+              disabled={action.isPending}
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                e.target.value = "";
+                if (!f) return;
+                if (tooBig(f))
+                  return toast(
+                    `Размер положения не должен превышать ${REGULATION_MAX_MB} МБ`,
+                    true,
+                  );
+                action.mutate({
+                  method: "put",
+                  url: "/competitions/" + comp.id + "/regulation",
+                  data: regulationForm(f),
+                });
+              }}
+            />
+          </label>
+          {file && (
+            <button
+              type="button"
+              className="text-link text-danger"
+              disabled={action.isPending}
+              onClick={() =>
+                confirm("Удалить файл положения?") &&
+                action.mutate({
+                  method: "delete",
+                  url: "/competitions/" + comp.id + "/regulation",
+                })
+              }
+            >
+              <Trash2 size={14} />
+              Удалить
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 export function CompetitionForm({ initial, onSaved }: any) {
   const meta = useData("/metadata");
   const action = useAction();
+  const [file, setFile] = useState<File | null>(null);
   const [v, setV] = useState<any>(
     initial
       ? Object.fromEntries(
@@ -92,11 +206,17 @@ export function CompetitionForm({ initial, onSaved }: any) {
       onSubmit={async (e) => {
         e.preventDefault();
         try {
-          await action.mutateAsync({
+          const saved = await action.mutateAsync({
             method: initial ? "put" : "post",
             url: "/competitions" + (initial ? "/" + initial.id : ""),
             data: { ...v, regulation_url: v.regulation_url || null },
           });
+          if (file)
+            await action.mutateAsync({
+              method: "put",
+              url: "/competitions/" + saved.id + "/regulation",
+              data: regulationForm(file),
+            });
           onSaved();
         } catch {}
       }}
@@ -185,16 +305,32 @@ export function CompetitionForm({ initial, onSaved }: any) {
         {field("calendar_plan", "Календарный план", "text", { readOnly: true })}
         {field("calendar_number", "Номер в календарном плане")}
       </div>
-      <Field label="Ссылка на положение (PDF или документ)">
-        <input
-          type="url"
-          value={v.regulation_url || ""}
-          placeholder="https://…"
-          onChange={(e) => set("regulation_url", e.target.value)}
-        />
-      </Field>
+      <div className="form-grid">
+        <Field
+          label="Файл положения"
+          hint={
+            initial?.regulation_file && !file
+              ? "Прикреплён: " + initial.regulation_file.filename
+              : `PDF, DOCX, DOC или ODT, до ${REGULATION_MAX_MB} МБ`
+          }
+        >
+          <input
+            type="file"
+            accept={REGULATION_ACCEPT}
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+        </Field>
+        <Field label="Ссылка на положение (необязательно)">
+          <input
+            type="url"
+            value={v.regulation_url || ""}
+            placeholder="https://…"
+            onChange={(e) => set("regulation_url", e.target.value)}
+          />
+        </Field>
+      </div>
       <div className="form-footer">
-        <Button disabled={action.isPending}>
+        <Button disabled={action.isPending || tooBig(file)}>
           {initial ? "Сохранить" : "Создать черновик"}
         </Button>
       </div>
@@ -544,18 +680,7 @@ export function CompetitionDetail() {
                 </div>
                 <div>
                   <span>Положение</span>
-                  {comp.regulation_url ? (
-                    <a
-                      href={comp.regulation_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-link"
-                    >
-                      Открыть документ <ArrowRight size={14} />
-                    </a>
-                  ) : (
-                    <strong>Не прикреплено</strong>
-                  )}
+                  <Regulation comp={comp} />
                 </div>
               </div>
               {["athlete", "coach"].includes(role) && (

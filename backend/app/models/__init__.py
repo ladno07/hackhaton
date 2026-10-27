@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -161,6 +162,21 @@ class Competition(Base):
     regulation_url: Mapped[str | None] = mapped_column(Text)
     state: Mapped[str] = mapped_column(String(20), default="draft")
     revision: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CompetitionRegulation(Base):
+    __tablename__ = "competition_regulations"
+    competition_id: Mapped[int] = mapped_column(
+        ForeignKey("competitions.id", ondelete="CASCADE"), primary_key=True
+    )
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120))
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now
+    )
 
 
 class CompetitionApplication(Base):
