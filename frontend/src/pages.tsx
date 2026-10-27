@@ -40,11 +40,91 @@ import {
   State,
   Table,
 } from "./components/shared";
+const attentionGroups: [string, string, string][] = [
+  ["applications", "Заявки на соревнования", "/competitions"],
+  ["rank_applications", "Заявки на разряды и категории", "/ranks"],
+  ["ranks", "Истекающие разряды", "/registry"],
+  ["categories", "Истекающие судейские категории", "/registry"],
+  ["reports", "Сроки отчётов", "/settings"],
+];
+
+function AttentionPanel() {
+  const attention = useData("/dashboard/attention");
+  const items: any[] = attention.data?.items || [];
+  const soon = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  return (
+    <section className="panel attention-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>
+            <Clock3 size={18} /> Требует внимания
+          </h2>
+          <p>
+            Решения федерации и сроки · истечение в ближайшие{" "}
+            {attention.data?.window_days || 30} дней
+          </p>
+        </div>
+        <span className="count-label">{items.length}</span>
+      </div>
+      <State query={attention}>
+        {items.length ? (
+          attentionGroups.map(([kind, label, link]) => {
+            const group = items.filter((i) => i.kind === kind);
+            return (
+              <div className="attention-group" key={kind}>
+                <div className="attention-group-title">
+                  <span>{label}</span>
+                  <b>{group.length}</b>
+                </div>
+                {group.slice(0, 3).map((i) => (
+                  <Link
+                    className="deadline-row"
+                    key={kind + ":" + i.id}
+                    to={i.link}
+                  >
+                    <span
+                      className={
+                        "deadline-dot " +
+                        (i.overdue || (kind !== "rank_applications" && i.due_on <= soon)
+                          ? "urgent"
+                          : "")
+                      }
+                    />
+                    <div>
+                      <h3>
+                        {i.title.replace("Демо · ", "")} · {i.detail}
+                      </h3>
+                      <p>
+                        {i.overdue ? "просрочено · " : i.date_label + " "}
+                        {date(i.due_on)}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+                {group.length > 3 && (
+                  <Link className="attention-more" to={link}>
+                    Ещё {group.length - 3} <ArrowRight size={13} />
+                  </Link>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <Empty
+            text="Всё под контролем"
+            hint="Нет заявок на рассмотрении и ближайших сроков."
+          />
+        )}
+      </State>
+    </section>
+  );
+}
+
 export function Overview() {
   const { user, role } = useAuth();
   const stats = useData("/dashboard");
   const comps = useData("/competitions");
-  const deadlines = useData("/deadlines");
+  const deadlines = useData("/deadlines", role !== "admin");
   const pop = useData(
     "/reports/population?start_year=" +
       (new Date().getFullYear() - 3) +
@@ -187,37 +267,41 @@ export function Overview() {
             )}
           </State>
         </section>
-        <section className="panel attention-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>
-                <Clock3 size={18} /> Не пропустите
-              </h2>
-              <p>Сроки в вашем кабинете</p>
+        {role === "admin" ? (
+          <AttentionPanel />
+        ) : (
+          <section className="panel attention-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>
+                  <Clock3 size={18} /> Не пропустите
+                </h2>
+                <p>Сроки в вашем кабинете</p>
+              </div>
+              <span className="count-label">{deadlines.data?.length || 0}</span>
             </div>
-            <span className="count-label">{deadlines.data?.length || 0}</span>
-          </div>
-          <State query={deadlines}>
-            {deadlines.data?.length ? (
-              deadlines.data.slice(0, 4).map((d: any, i: number) => (
-                <div className="deadline-row" key={d.kind + ":" + d.id}>
-                  <span
-                    className={"deadline-dot " + (i === 0 ? "urgent" : "")}
-                  />
-                  <div>
-                    <h3>{d.title.replace("Демо · ", "")}</h3>
-                    <p>{date(d.due_on)}</p>
+            <State query={deadlines}>
+              {deadlines.data?.length ? (
+                deadlines.data.slice(0, 4).map((d: any, i: number) => (
+                  <div className="deadline-row" key={d.kind + ":" + d.id}>
+                    <span
+                      className={"deadline-dot " + (i === 0 ? "urgent" : "")}
+                    />
+                    <div>
+                      <h3>{d.title.replace("Демо · ", "")}</h3>
+                      <p>{date(d.due_on)}</p>
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <Empty
-                text="Нет ближайших сроков"
-                hint="Уведомим, когда появится важное событие."
-              />
-            )}
-          </State>
-        </section>
+                ))
+              ) : (
+                <Empty
+                  text="Нет ближайших сроков"
+                  hint="Уведомим, когда появится важное событие."
+                />
+              )}
+            </State>
+          </section>
+        )}
       </div>
       {role === "admin" ? (
         <section className="panel growth-panel">

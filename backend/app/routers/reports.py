@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select, func
@@ -93,6 +93,116 @@ def dashboard(actor: Actor = Depends(current_actor), db: Session = Depends(get_d
             )
         ),
         "organizations": db.scalar(select(func.count()).select_from(Organization)),
+    }
+
+
+ATTENTION_DAYS = 30  # same window as expiry notifications
+
+
+@router.get("/dashboard/attention")
+def attention(
+    actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db)
+):
+    """Federation to-do list: what waits for a decision or expires soon."""
+    today = date.today()
+    until = today + timedelta(days=ATTENTION_DAYS)
+    items = []
+
+    def add(kind, id, title, detail, due_on, date_label, link):
+        items.append(
+            {
+                "kind": kind,
+                "id": id,
+                "title": title,
+                "detail": detail,
+                "due_on": due_on,
+                "date_label": date_label,
+                "link": link,
+                "overdue": due_on < today,
+            }
+        )
+
+    pending = db.execute(
+        select(Competition, func.count(CompetitionApplication.id))
+        .join(CompetitionApplication, CompetitionApplication.competition_id == Competition.id)
+        .where(CompetitionApplication.status == "pending")
+        .group_by(Competition.id)
+    ).all()
+    for c, count in pending:
+        add(
+            "applications",
+            c.id,
+            c.title,
+            f"На рассмотрении: {count}",
+            c.deadline,
+            "приём до",
+            f"/competitions/{c.id}",
+        )
+    for a in db.scalars(
+        select(RankApplication).where(RankApplication.status == "pending")
+    ):
+        owner = db.get(Athlete, a.athlete_id) if a.athlete_id else db.get(Judge, a.judge_id)
+        add(
+            "rank_applications",
+            a.id,
+            owner.user.full_name,
+            ("Разряд: " if a.athlete_id else "Категория: ") + a.name,
+            a.created_at.date(),
+            "подана",
+            "/ranks",
+        )
+    for r in db.scalars(
+        select(SportsRank).where(
+            SportsRank.expires_on >= today, SportsRank.expires_on <= until
+        )
+    ):
+        add(
+            "ranks",
+            r.id,
+            db.get(Athlete, r.athlete_id).user.full_name,
+            r.name,
+            r.expires_on,
+            "истекает",
+            "/registry",
+        )
+    for c, judge in db.execute(
+        select(JudgeCategory, Judge)
+        .join(Judge, Judge.id == JudgeCategory.judge_id)
+        .where(
+            Judge.archived_at.is_(None),
+            JudgeCategory.expires_on >= today,
+            JudgeCategory.expires_on <= until,
+        )
+    ):
+        add(
+            "categories",
+            c.id,
+            judge.user.full_name,
+            c.name,
+            c.expires_on,
+            "истекает",
+            "/registry",
+        )
+    for d in db.scalars(select(Deadline).where(Deadline.done == False)):
+        add("reports", d.id, d.title, "Срок отчётности", d.due_on, "срок", "/settings")
+    governor = date(today.year if today.month == 1 else today.year + 1, 2, 1)
+    if governor <= until:
+        add(
+            "reports",
+            0,
+            "Ходатайства на премии Губернатора",
+            "Срок подачи",
+            governor,
+            "срок",
+            "/ratings",
+        )
+
+    items.sort(key=lambda x: x["due_on"])
+    kinds = ("applications", "rank_applications", "ranks", "categories", "reports")
+    return {
+        "window_days": ATTENTION_DAYS,
+        "counts": {k: sum(i["kind"] == k for i in items) for k in kinds},
+        "items": items,
     }
 
 
