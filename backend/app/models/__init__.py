@@ -570,3 +570,41 @@ class LoginSession(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class DevelopmentIndicator(Base):
+    """Indicator value entered by the federation; the source is mandatory,
+    documents confirm it (statistical forms, reports of organizations)."""
+
+    __tablename__ = "development_indicators"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    name: Mapped[str] = mapped_column(String(240))
+    value: Mapped[float] = mapped_column(Float)
+    unit: Mapped[str] = mapped_column(String(40))
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
+    source: Mapped[str] = mapped_column(Text)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    documents: Mapped[list["IndicatorDocument"]] = relationship(
+        order_by="IndicatorDocument.id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class IndicatorDocument(Base):
+    __tablename__ = "indicator_documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    indicator_id: Mapped[int] = mapped_column(
+        ForeignKey("development_indicators.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120))
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now
+    )

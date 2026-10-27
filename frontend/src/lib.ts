@@ -124,6 +124,10 @@ export const ranks = [
   "МС",
   "МСМК",
 ];
+export const fileSize = (n: number) =>
+  n < 1024 * 1024
+    ? Math.max(1, Math.round(n / 1024)) + " КБ"
+    : (n / 1024 / 1024).toFixed(1).replace(".", ",") + " МБ";
 export async function download(url: string, name: string) {
   const res = await api.get(url, { responseType: "blob" });
   const obj = URL.createObjectURL(res.data);

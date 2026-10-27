@@ -78,6 +78,57 @@ def ministry_demo(db):
     db.flush()
 
 
+def indicators_demo(db, admin, year):
+    """Entered indicators with sources; one has a sample statistical form."""
+    form = DevelopmentIndicator(
+        year=year,
+        name="Численность занимающихся по форме № 1-ФК",
+        value=148,
+        unit="чел.",
+        source=f"Форма федерального статистического наблюдения № 1-ФК за {year} г., раздел «Спортивное программирование»",
+        comment="Демонстрационное значение, не является официальной статистикой",
+        updated_by=admin.id,
+    )
+    pdf = export_document(
+        OfficialDocument(
+            kind="Сведения",
+            title=f"о численности занимающихся за {year} год",
+            headers=["Показатель", "Значение"],
+            rows=[
+                ["Численность занимающихся", "148 чел."],
+                ["Из них в возрасте до 18 лет", "97 чел."],
+                ["Документ", "Демонстрационный образец, не имеет силы"],
+            ],
+            dated=date(year + 1, 1, 15),
+            signatures=[(settings.fsp_head_position, settings.fsp_head_name)],
+        ),
+        "pdf",
+    )
+    form.documents.append(
+        IndicatorDocument(
+            filename=f"Форма 1-ФК за {year} год.pdf",
+            content_type="application/pdf",
+            size=len(pdf),
+            data=pdf,
+            uploaded_by=admin.id,
+        )
+    )
+    db.add_all(
+        [
+            form,
+            DevelopmentIndicator(
+                year=year,
+                name="Спортивных площадок для занятий",
+                value=6,
+                unit="ед.",
+                source="Отчёты организаций, представленные в федерацию по итогам года",
+                comment="Демонстрационное значение",
+                updated_by=admin.id,
+            ),
+        ]
+    )
+
+
 def seed(demo=False):
     with SessionLocal() as db:
         for k, v in ROLES:
@@ -441,6 +492,7 @@ def seed(demo=False):
                 due_on=today + timedelta(days=12),
             )
         )
+        indicators_demo(db, admin, year - 1)
         ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(

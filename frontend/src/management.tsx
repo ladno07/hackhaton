@@ -54,6 +54,7 @@ import {
 } from "./components/shared";
 import { ProfileEditor } from "./pages";
 import { ArchiveForm, StaffEditor, staffKinds } from "./staff";
+import { Indicators } from "./indicators";
 
 export function Registry() {
   const { role } = useAuth();
@@ -1277,6 +1278,7 @@ export function Reports() {
           )}
         </State>
       </section>
+      <Indicators start={start} end={end} />
     </>
   );
 }

@@ -3201,3 +3201,56 @@ td a:hover {
     padding-right: 16px;
   }
 }
+.indicator-subtitle {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--fsp-neutral-700);
+  padding: 26px 24px 12px;
+  border-top: 1px solid var(--fsp-neutral-100);
+}
+.indicator-value {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.indicator-source {
+  max-width: 340px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--fsp-neutral-600);
+}
+.indicator-docs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 160px;
+}
+.indicator-doc {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.indicator-doc .text-link {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.indicator-doc .text-link:disabled {
+  opacity: 0.5;
+}
+.indicator-doc .icon-btn {
+  padding: 4px;
+}
+.indicator-missing {
+  color: var(--fsp-warning-700, var(--fsp-neutral-400));
+}
+.indicator-form-grid {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.indicator-note {
+  margin: 0 0 16px;
+}
+@media (max-width: 640px) {
+  .indicator-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

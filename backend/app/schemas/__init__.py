@@ -347,3 +347,19 @@ class ProfileVisibilityIn(Strict):
     show_rusada: bool = False
     show_training_stage: bool = False
     show_training_years: bool = False
+
+
+class IndicatorIn(Strict):
+    year: int = Field(ge=1970, le=2100)
+    name: str = Field(min_length=3, max_length=240)
+    value: float = Field(ge=0, le=1e12)
+    unit: str = Field("чел.", min_length=1, max_length=40)
+    organization_id: int | None = None
+    source: str = Field(min_length=5, max_length=2000)
+    comment: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def not_future(self):
+        if self.year > date.today().year:
+            raise ValueError("Показатель не может относиться к будущему году")
+        return self
