@@ -41,6 +41,7 @@ import {
   Coaching,
   Assignments,
   Notifications,
+  Deadlines,
   Audit,
 } from "./pages";
 import { Competitions, CompetitionDetail } from "./competitions";
@@ -577,6 +578,7 @@ export default function App() {
           }
         />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="deadlines" element={<Deadlines />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

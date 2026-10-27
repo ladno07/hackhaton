@@ -150,7 +150,7 @@ def decide_rank(
         db,
         audience,
         "Заявка на разряд / категорию рассмотрена",
-        f"{obj.name}: {obj.status}. {obj.comment}",
+        f"{obj.name}: {'одобрена' if obj.status == 'approved' else 'отклонена'}. {obj.comment or ''}",
         f"rank-decision:{obj.id}",
     )
     return row(obj)
@@ -338,8 +338,14 @@ def evsk_candidates(
 
 @router.get("/notifications")
 def notifications(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+    deliveries = {d.notification_id: d for d in db.scalars(select(TelegramDelivery).join(
+        TelegramLink, TelegramLink.id == TelegramDelivery.link_id
+    ).where(TelegramLink.user_id == actor.user.id))}
     return [
-        row(x)
+        {**row(x), "telegram_delivery": (
+            {"status": deliveries[x.id].status, "sent_at": deliveries[x.id].sent_at,
+             "last_error": deliveries[x.id].last_error}
+            if x.id in deliveries else None)}
         for x in db.scalars(
             select(Notification)
             .where(Notification.user_id == actor.user.id)

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import smtplib
+from fastapi import HTTPException
 from datetime import date, timedelta
 from email.message import EmailMessage
 from sqlalchemy import select
@@ -164,6 +165,41 @@ def visible_in_role(db, actor, notice):
 
     parts = notice.event_key.split(":")
     kind = parts[0]
+    if kind == "tg-reminder":
+        if actor.role not in (notice.telegram_context or {}).get("roles", []):
+            return False
+        family, entity_id = parts[1], int(parts[2])
+        if family in {"report", "governor"}:
+            return False
+        if family == "category":
+            category = db.get(JudgeCategory, entity_id)
+            return bool(category and actor.role == "judge" and category.judge_id == own(db, Judge, actor).id)
+        if family == "rank":
+            rank = db.get(SportsRank, entity_id)
+            if not rank:
+                return False
+            from app.services.common import can_athlete
+            try:
+                can_athlete(db, actor, rank.athlete_id, rank.discipline_id)
+                return True
+            except HTTPException:
+                return False
+        comp = db.get(Competition, entity_id)
+        if not comp:
+            return False
+        if actor.role == "judge":
+            return bool(family == "start" and db.get(CompetitionJudge, (comp.id, own(db, Judge, actor).id)))
+        # Only active links in the competition's discipline give coaches access.
+        athletes = visible_athletes(db, actor)
+        if actor.role == "coach":
+            athletes = set(db.scalars(select(AthleteCoach.athlete_id).where(
+                AthleteCoach.coach_id == own(db, Coach, actor).id,
+                AthleteCoach.status == "active", AthleteCoach.discipline_id == comp.discipline_id)))
+        if family == "start":
+            return bool(db.scalar(select(CompetitionApplication.id).where(
+                CompetitionApplication.competition_id == comp.id,
+                CompetitionApplication.athlete_id.in_(athletes), CompetitionApplication.status == "approved")))
+        return bool(athletes)
     if kind in {"application", "rank-application"}:
         return False
     if kind == "deadline":

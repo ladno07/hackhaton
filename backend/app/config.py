@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     smtp_tls: bool = False
     mail_from: str = "federation@orencode.test"
     notifications_worker: bool = True
+    telegram_bot_token: str = ""
+    telegram_bot_username: str = ""
+    public_site_url: str = "http://localhost:8080"
     pdf_font: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 

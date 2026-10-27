@@ -1,5 +1,13 @@
 # Модель данных и API
 
+## Telegram (миграция 0007)
+
+Отдельный процесс в `bot/` читает общие модели backend. `telegram_links` связывает аккаунт платформы с личным Telegram-чатом; `telegram_link_tokens` хранит HMAC-хеш 8-значного одноразового кода и его срок. `telegram_code_attempts` (миграция 0008) сохраняет ограничение пяти попыток за 10 минут на чат. `telegram_deliveries` хранит независимое от почты состояние отправки уведомления, а `telegram_cursor` — позицию long polling и общую паузу после ограничения Telegram. У соревнования добавлены необязательное `start_time` и IANA `timezone` (по умолчанию `Asia/Yekaterinburg`).
+
+API: `GET /api/telegram/link`, `POST /api/telegram/link-code`, `DELETE /api/telegram/link` работают только с собственным аккаунтом. Код выдаётся вместе с `bot_url` и `expires_at`; `/link-token` остаётся deprecated alias. `PATCH /api/competitions/{id}/schedule` разрешён федерации до публикации результатов, проверяет даты, возраст участников и сроки категорий судей, создаёт уведомление о переносе.
+
+Бот использует long polling и PostgreSQL advisory lock для одного процесса на базу. Расписание вычисляется из актуальных данных; перед отправкой повторно проверяются права и аудитория. События остаются в `notifications`, поле `telegram_context` хранит контекст напоминания и перехода. Каналы почты и Telegram имеют отдельные статусы и ошибки. Подробнее: [bot/README.md](../bot/README.md).
+
 ## Связи
 
 `users → user_roles → roles`: один аккаунт имеет несколько ролей. `athletes`, `coaches`, `judges` связаны с аккаунтом 1:1. Профиль не удаляется при снятии роли, поэтому сохраняется история.

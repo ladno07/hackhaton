@@ -16,6 +16,7 @@ from app.schemas import (
     JudgeIn,
     CompetitionTypeIn,
     AgeGroupIn,
+    CompetitionScheduleIn,
 )
 from app.security import Actor, current_actor, allow
 from app.services.common import *
@@ -178,6 +179,52 @@ def remove(
         raise HTTPException(409, "Удалить можно только черновик")
     audit(db, actor, "Удаление соревнования", obj)
     db.delete(obj)
+
+
+@router.patch("/competitions/{comp_id}/schedule")
+def change_schedule(
+    comp_id: int, data: CompetitionScheduleIn,
+    actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db),
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Расписание после публикации результатов менять нельзя")
+    if data.start_date < comp.deadline:
+        raise HTTPException(422, "Начало не может быть раньше дедлайна заявок")
+    previous = (comp.start_date, comp.end_date, comp.start_time, comp.timezone)
+    for key, value in data.model_dump().items():
+        setattr(comp, key, value)
+    if previous == (comp.start_date, comp.end_date, comp.start_time, comp.timezone):
+        return row(comp)
+    audience = set()
+    for application in db.scalars(select(CompetitionApplication).where(
+        CompetitionApplication.competition_id == comp.id, CompetitionApplication.status == "approved"
+    )):
+        athlete = db.get(Athlete, application.athlete_id)
+        if not age_check(db, comp, athlete)["eligible"]:
+            raise HTTPException(422, "Новая дата не соответствует возрасту допущенного участника")
+        audience.add(athlete.user_id)
+        audience.update(db.scalars(select(Coach.user_id).join(AthleteCoach, AthleteCoach.coach_id == Coach.id).where(
+            AthleteCoach.athlete_id == athlete.id, AthleteCoach.discipline_id == comp.discipline_id,
+            AthleteCoach.status == "active", Coach.archived_at.is_(None)
+        )))
+    for judge in db.scalars(select(Judge).join(CompetitionJudge, CompetitionJudge.judge_id == Judge.id).where(
+        CompetitionJudge.competition_id == comp.id
+    )):
+        if not db.scalar(select(JudgeCategory.id).where(JudgeCategory.judge_id == judge.id, JudgeCategory.expires_on >= comp.end_date)):
+            raise HTTPException(422, "Категория назначенного судьи не действует до новой даты окончания")
+        audience.add(judge.user_id)
+    comp.revision += 1
+    if comp.state != "draft":
+        notify(db, audience, "Изменилось расписание соревнования",
+               f"{comp.title}\n{comp.start_date} — {comp.end_date}, "
+               f"{comp.start_time.strftime('%H:%M') if comp.start_time else 'время уточняется'} ({comp.timezone})",
+               f"competition-schedule:{comp.id}:{comp.revision}")
+        for notice in db.scalars(select(Notification).where(Notification.event_key == f"competition-schedule:{comp.id}:{comp.revision}")):
+            notice.telegram_context = {"schedule": [str(comp.start_date), str(comp.end_date), str(comp.start_time), comp.timezone],
+                                        "path": f"/competitions/{comp.id}"}
+    audit(db, actor, "Перенос расписания соревнования", comp, data.model_dump(mode="json"))
+    return row(comp)
 
 
 @router.patch("/competitions/{comp_id}/state")
@@ -425,7 +472,7 @@ def moderate(
         db,
         athlete_audience(db, obj.athlete_id),
         "Статус заявки изменён",
-        f"{comp.title}: {data.status}. {data.comment}",
+        f"{comp.title}: {'одобрена' if data.status == 'approved' else 'отклонена'}. {data.comment or ''}",
         f"application-decision:{obj.id}",
     )
     return row(obj)

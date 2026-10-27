@@ -29,6 +29,7 @@ import { date, formats, roleNames, sexNames, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
+import { TelegramConnection, TelegramDeliveryStatus } from "./telegram";
 import {
   Badge,
   Empty,
@@ -875,8 +876,9 @@ export function Notifications() {
     <>
       <PageTitle
         title="Уведомления"
-        description="События платформы и напоминания. Копии отправляются на электронную почту."
+        description="События платформы и напоминания. Доставка на почту и в подключённый Telegram."
       />
+      <TelegramConnection />
       <section className="panel">
         <State query={q}>
           {q.data?.length ? (
@@ -898,6 +900,7 @@ export function Notifications() {
                       : n.last_error
                         ? "Ошибка отправки; повторим автоматически"
                         : "В очереди на отправку"}
+                    <TelegramDeliveryStatus delivery={n.telegram_delivery} />
                   </small>
                 </div>
                 {!n.read_at && (
@@ -924,6 +927,20 @@ export function Notifications() {
       </section>
     </>
   );
+}
+export function Deadlines() {
+  const query = useData("/deadlines");
+  return <>
+    <PageTitle title="Мои сроки" description="Соревнования, разряды, категории и отчётность в пределах вашего кабинета." />
+    <section className="panel panel-padding"><State query={query}>
+      {query.data?.length ? <Table heads={["Событие", "Срок", "Подробнее"]}>
+        {query.data.map((item: any) => <tr key={`${item.kind}:${item.id}`}>
+          <td>{item.title}</td><td>{date(item.due_on)}</td>
+          <td><Link to={item.kind === "competition" ? `/competitions/${item.id}` : ["rank", "category"].includes(item.kind) ? "/ranks" : "/settings"}>Открыть</Link></td>
+        </tr>)}
+      </Table> : <Empty text="Предстоящих сроков пока нет" />}
+    </State></section>
+  </>;
 }
 export function Audit() {
   const q = useData("/audit");

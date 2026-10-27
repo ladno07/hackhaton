@@ -186,6 +186,8 @@ export function CompetitionForm({ initial, onSaved }: any) {
             "discipline_id",
             "type_id",
             "start_date",
+            "start_time",
+            "timezone",
             "end_date",
             "deadline",
             "location",
@@ -210,6 +212,8 @@ export function CompetitionForm({ initial, onSaved }: any) {
           discipline_id: 1,
           type_id: 1,
           start_date: today(),
+          start_time: null,
+          timezone: "Asia/Yekaterinburg",
           end_date: today(),
           deadline: today(),
           location: "Оренбург",
@@ -252,6 +256,7 @@ export function CompetitionForm({ initial, onSaved }: any) {
             url: "/competitions" + (initial ? "/" + initial.id : ""),
             data: {
               ...v,
+              start_time: v.start_time || null,
               // groups of another discipline are dropped when it changes
               age_group_ids: picked.map((g: any) => g.id),
               regulation_url: v.regulation_url || null,
@@ -297,6 +302,10 @@ export function CompetitionForm({ initial, onSaved }: any) {
       <div className="form-grid">
         {field("start_date", "Дата начала", "date")}
         {field("end_date", "Дата окончания", "date")}
+      </div>
+      <div className="form-grid">
+        {field("start_time", "Время начала (необязательно)", "time", { required: false })}
+        {field("timezone", "Часовой пояс IANA")}
       </div>
       <div className="form-grid">
         {field("deadline", "Заявки до", "date")}
@@ -759,6 +768,22 @@ function ProtocolHistory({ id }: any) {
     </State>
   );
 }
+function ScheduleForm({ comp, onSaved }: any) {
+  const action = useAction();
+  const [values, setValues] = useState({ start_date: comp.start_date, end_date: comp.end_date,
+    start_time: comp.start_time || "", timezone: comp.timezone || "Asia/Yekaterinburg" });
+  return <form onSubmit={async e => { e.preventDefault();
+    await action.mutateAsync({ method: "patch", url: `/competitions/${comp.id}/schedule`,
+      data: { ...values, start_time: values.start_time || null } }); onSaved(); }}>
+    <p>Допущенные участники, их тренеры и судьи получат уведомление о переносе.</p>
+    {([ ["start_date", "Дата начала", "date"], ["end_date", "Дата окончания", "date"],
+      ["start_time", "Время начала (необязательно)", "time"], ["timezone", "Часовой пояс IANA", "text"] ] as const).map(([key, label, type]) =>
+      <Field key={key} label={label}><input type={type} required={key !== "start_time"} value={values[key]}
+        onChange={e => setValues({ ...values, [key]: e.target.value })} /></Field>)}
+    <Button disabled={action.isPending}>Сохранить расписание</Button>
+  </form>;
+}
+
 export function CompetitionDetail() {
   const { id } = useParams();
   const { role, user } = useAuth();
@@ -771,6 +796,7 @@ export function CompetitionDetail() {
   const action = useAction();
   const [tab, setTab] = useState("applications");
   const [edit, setEdit] = useState(false);
+  const [scheduleEdit, setScheduleEdit] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [athlete, setAthlete] = useState("");
   const [judge, setJudge] = useState("");
@@ -793,9 +819,11 @@ export function CompetitionDetail() {
             <PageTitle
               eyebrow={comp.discipline?.toUpperCase()}
               title={comp.title.replace("Демо · ", "")}
-              description={`${date(comp.start_date)} — ${date(comp.end_date)} · ${comp.location}`}
+              description={`${date(comp.start_date)} — ${date(comp.end_date)} · ${comp.start_time ? comp.start_time.slice(0, 5) : "Время уточняется"} (${comp.timezone}) · ${comp.location}`}
             >
               <Badge value={comp.state} />
+              {role === "admin" && ["open", "closed"].includes(comp.state) && <Button variant="outline"
+                onClick={() => setScheduleEdit(true)}>Изменить расписание</Button>}
               {role === "admin" && comp.state === "draft" && (
                 <>
                   <Button variant="outline" onClick={() => setEdit(true)}>
@@ -1209,6 +1237,9 @@ export function CompetitionDetail() {
               wide
             >
               <CompetitionForm initial={comp} onSaved={() => setEdit(false)} />
+            </Dialog>
+            <Dialog open={scheduleEdit} onOpenChange={setScheduleEdit} title="Расписание соревнования">
+              <ScheduleForm comp={comp} onSaved={() => setScheduleEdit(false)} />
             </Dialog>
           </>
         )}
