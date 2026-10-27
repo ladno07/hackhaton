@@ -119,7 +119,7 @@ export function Overview() {
                 : role === "athlete"
                   ? "Мой профиль"
                   : role === "judge"
-                    ? "Мои назначения"
+                    ? "Назначения"
                     : "Спортсмены"
             }
             value={role === "judge" ? s?.assignments : s?.athletes}
@@ -839,44 +839,6 @@ export function Coaching() {
           <Button disabled={action.isPending}>Отправить запрос</Button>
         </form>
       </Dialog>
-    </>
-  );
-}
-export function Assignments() {
-  const q = useData("/assignments");
-  return (
-    <>
-      <PageTitle
-        title="Мои назначения"
-        description="Предстоящие соревнования и история работы в судейской коллегии."
-      />
-      <section className="panel">
-        <State query={q}>
-          {q.data?.length ? (
-            <Table heads={["Соревнование", "Дата", "Должность", "Статус"]}>
-              {q.data.map((j: any) => (
-                <tr key={j.competition_id}>
-                  <td>
-                    <Link to={"/competitions/" + j.competition_id}>
-                      {j.title}
-                    </Link>
-                  </td>
-                  <td>{date(j.start_date)}</td>
-                  <td>{j.position}</td>
-                  <td>
-                    <Badge value={j.state} />
-                  </td>
-                </tr>
-              ))}
-            </Table>
-          ) : (
-            <Empty
-              text="Пока нет назначений"
-              hint="Федерация назначает судей на соревнования."
-            />
-          )}
-        </State>
-      </section>
     </>
   );
 }

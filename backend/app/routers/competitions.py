@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import PurePath
+from typing import Literal
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import delete, func, select
@@ -614,16 +615,37 @@ def history(
 
 @router.get("/assignments")
 def assignments(
-    actor: Actor = Depends(allow("admin", "judge")), db: Session = Depends(get_db)
+    scope: Literal["upcoming", "past"] | None = None,
+    actor: Actor = Depends(allow("admin", "judge")),
+    db: Session = Depends(get_db),
 ):
-    query = select(CompetitionJudge, Competition).join(
-        Competition, Competition.id == CompetitionJudge.competition_id
+    """upcoming: the competition has not ended yet; past: it ended before today."""
+    query = (
+        select(CompetitionJudge, Competition, Discipline)
+        .join(Competition, Competition.id == CompetitionJudge.competition_id)
+        .join(Discipline, Discipline.id == Competition.discipline_id)
     )
     if actor.role == "judge":
         query = query.where(CompetitionJudge.judge_id == own(db, Judge, actor).id)
+    if scope == "upcoming":
+        query = query.where(Competition.end_date >= date.today()).order_by(
+            Competition.start_date, Competition.id
+        )
+    elif scope == "past":
+        query = query.where(Competition.end_date < date.today()).order_by(
+            Competition.start_date.desc(), Competition.id.desc()
+        )
     return [
-        {**row(j), "title": c.title, "start_date": c.start_date, "state": c.state}
-        for j, c in db.execute(query)
+        {
+            **row(j),
+            "title": c.title,
+            "start_date": c.start_date,
+            "end_date": c.end_date,
+            "location": c.location,
+            "discipline": d.short_name,
+            "state": c.state,
+        }
+        for j, c, d in db.execute(query)
     ]
 
 
