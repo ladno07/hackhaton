@@ -29,6 +29,8 @@ import {
   Users,
   X,
   ClipboardList,
+  BookOpen,
+  Route as RouteIcon,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames } from "./lib";
@@ -50,6 +52,7 @@ import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 import { AthleteSummary } from "./athlete-summary";
 import { Assignments, JudgingHistory } from "./judging";
 import { Navigator } from "./navigator";
+import { Help, PersonalPath, PublicGlossary } from "./path";
 
 function Login() {
   const auth = useAuth();
@@ -317,6 +320,12 @@ const navigation = [
     roles: ["judge"],
   },
   {
+    to: "/path",
+    label: "Личный путь",
+    icon: RouteIcon,
+    roles: ["athlete"],
+  },
+  {
     to: "/ranks",
     label: "Разряды и категории",
     icon: FileCheck2,
@@ -335,6 +344,12 @@ const navigation = [
     roles: ["admin"],
   },
   { to: "/audit", label: "Журнал действий", icon: Activity, roles: ["admin"] },
+  {
+    to: "/help",
+    label: "Справочник понятий",
+    icon: BookOpen,
+    roles: ["admin", "athlete", "coach", "judge"],
+  },
   { to: "/settings", label: "Управление", icon: Settings2, roles: ["admin"] },
   {
     to: "/profile",
@@ -511,6 +526,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/start" element={<Navigator />} />
+      <Route path="/glossary" element={<PublicGlossary />} />
       <Route element={<Layout />}>
         <Route index element={<Overview />} />
         <Route path="competitions" element={<Competitions />} />
@@ -555,6 +571,15 @@ export default function App() {
           path="judging"
           element={<Guard roles={["judge"]}><JudgingHistory /></Guard>}
         />
+        <Route
+          path="path"
+          element={<Guard roles={["athlete"]}><PersonalPath /></Guard>}
+        />
+        <Route
+          path="path/:id"
+          element={<Guard roles={["coach", "admin"]}><PersonalPath /></Guard>}
+        />
+        <Route path="help" element={<Help />} />
         <Route path="ranks" element={<Ranks />} />
         <Route path="ratings" element={<Ratings />} />
         <Route

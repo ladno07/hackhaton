@@ -314,6 +314,24 @@ def seed(demo=False):
                 result_id=result.id,
             )
         )
+        # Illustrative conditions for the personal path; not real EVSK norms.
+        db.add_all(
+            [
+                EvskRule(
+                    discipline_id=1,
+                    level=level,
+                    rank_name=rank,
+                    max_place=place,
+                    min_participants=count,
+                    source="Демо · условие для показа, не является нормативом ЕВСК",
+                )
+                for rank, level, place, count in [
+                    ("II", "regional", 3, 8),
+                    ("I", "interregional", 2, 8),
+                    ("КМС", "russian_championship", 3, 10),
+                ]
+            ]
+        )
         for i in range(6):
             start = today + timedelta(days=10 + i * 6)
             c = Competition(

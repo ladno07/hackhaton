@@ -857,6 +857,12 @@ export function Coaching() {
                             </Link>
                           </Button>
                         )}
+                      {["coach", "admin"].includes(role) &&
+                        l.status === "active" && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={`/path/${l.athlete_id}`}>Личный путь</Link>
+                          </Button>
+                        )}
                       {role === "athlete" &&
                         ["pending", "paused"].includes(l.status) && (
                           <Button
