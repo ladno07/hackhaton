@@ -9,11 +9,12 @@ from app.models import *
 from app.security import password_hash, Actor
 from app.services.common import audit, age_at
 from app.services.ratings import recalculate
-from app.services.notifications import notify
+from app.services.notifications import admins, athlete_audience, notify
 from app.config import settings
 from app.services.documents import OfficialDocument, export_document
 from app.services.protocols import add_version
 from app.services.awards import DEFAULT_AMOUNTS, achievements
+from app.services.standards import STAGES, basis_of, meets, readiness
 
 DISCIPLINES = [
     ("Программирование алгоритмическое", "Алгоритмы"),
@@ -205,6 +206,92 @@ def appeals_demo(db, admin, coach_user, athletes, cup):
                 created_at=now() - timedelta(days=29 if status == "rejected" else 1),
             )
         )
+
+
+RUN, PUSH, BEND = (
+    "Бег 30 м",
+    "Сгибание и разгибание рук в упоре лёжа",
+    "Наклон вперёд из положения стоя",
+)
+TYPING, CONTEST = (
+    "Набор эталонного текста на клавиатуре",
+    "Решение задач тренировочного контеста за 5 часов",
+)
+# Illustrative thresholds for transfer to the stage (НП, УТ, ССМ, ВСМ); the
+# federation checks them against the FSSP order for the sport. The contest
+# standard is for discipline 1 (algorithmic programming) only.
+STANDARDS = [
+    ("ofp", RUN, "с", "lower", "male", None, (6.9, 6.2, 5.7, 5.4)),
+    ("ofp", RUN, "с", "lower", "female", None, (7.2, 6.6, 6.2, 5.9)),
+    ("ofp", PUSH, "раз", "higher", "male", None, (7, 13, 20, 25)),
+    ("ofp", PUSH, "раз", "higher", "female", None, (4, 7, 10, 12)),
+    ("ofp", BEND, "см", "higher", "male", None, (1, 3, 5, 6)),
+    ("ofp", BEND, "см", "higher", "female", None, (3, 5, 8, 9)),
+    ("sfp", TYPING, "зн/мин", "higher", None, None, (80, 120, 160, 200)),
+    ("sfp", CONTEST, "задач", "higher", None, 1, (2, 4, 6, 8)),
+]
+
+
+def standards_demo(db, admin, coach_user, athletes):
+    """The demo athlete has passed most standards for the next stage but lacks
+    the rank; one coached athlete is ready, another is halfway; one was
+    transferred last year."""
+    today = date.today()
+    source = "Демо · ориентир для показа, сверить с приказом Минспорта России об утверждении ФССП"
+    catalog = {}
+    for category, name, unit, better, sex, discipline_id, values in STANDARDS:
+        for stage, threshold in zip(STAGES, values):
+            s = TrainingStandard(
+                stage=stage, category=category, name=name, unit=unit, better=better,
+                threshold=threshold, sex=sex, discipline_id=discipline_id,
+                source=source, sort_order=len(catalog) * 10,
+            )
+            db.add(s)
+            catalog[stage, name, sex] = s
+    db.flush()
+
+    def record(athlete, stage, values, days_ago):
+        sex = athlete.user.sex
+        for name, value in values.items():
+            s = catalog.get((stage, name, sex)) or catalog[stage, name, None]
+            db.add(
+                StandardResult(
+                    athlete_id=athlete.id, standard_id=s.id, value=value,
+                    tested_on=today - timedelta(days=days_ago), threshold=s.threshold,
+                    passed=meets(s, value), recorded_by=coach_user.id, recorded_role="coach",
+                )
+            )
+
+    record(athletes[0], "ssm", {RUN: 6.0, PUSH: 9, BEND: 9, TYPING: 170, CONTEST: 6}, 20)
+    record(athletes[0], "ssm", {PUSH: 8}, 120)
+    for a in athletes[1:3]:
+        a.training_stage = STAGES["np"]
+    record(athletes[1], "ut", {RUN: 6.1, PUSH: 15, BEND: 4, TYPING: 130, CONTEST: 4}, 14)
+    record(athletes[2], "ut", {RUN: 6.5, PUSH: 6, BEND: 6, TYPING: 125}, 10)
+    # last year's testing of the transferred athlete has already expired
+    moved = athletes[3]
+    record(moved, "ut", {RUN: 6.0, PUSH: 14, BEND: 4, TYPING: 128, CONTEST: 5}, 400)
+    db.flush()
+    moved.training_stage = STAGES["np"]
+    state = readiness(db, moved, today - timedelta(days=390))
+    db.add(
+        StageTransfer(
+            athlete_id=moved.id, from_stage=STAGES["np"], to_stage="ut",
+            decided_on=today - timedelta(days=390), order_number="ДЕМО-25/Э",
+            basis=basis_of(state), created_by=admin.id,
+        )
+    )
+    moved.training_stage = STAGES["ut"]
+    db.flush()
+    ready = athletes[1]
+    notify(
+        db,
+        [*admins(db), *athlete_audience(db, ready.id)],
+        "Готов к переводу на следующий этап",
+        f"{ready.user.full_name}: выполнены нормативы этапа «{STAGES['ut']}». "
+        "Перевод оформляет федерация.",
+        f"stage-ready:{ready.id}:ut",
+    )
 
 
 def seed(demo=False):
@@ -581,6 +668,7 @@ def seed(demo=False):
         indicators_demo(db, admin, year - 1)
         awards_demo(db, admin, (today - timedelta(days=30)).year)
         appeals_demo(db, admin, trainer, athletes, cup)
+        standards_demo(db, admin, trainer, athletes)
         ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(

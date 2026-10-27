@@ -9,6 +9,7 @@ from app.config import settings
 from app.db import engine
 from app.routers import auth, registry, staff, competitions, federation, reports, public, telegram
 from app.routers import appeals, awards, competition_teams, documents, indicators, passports
+from app.routers import standards
 from app.services.notifications import worker
 
 
@@ -82,6 +83,7 @@ for router in [
     indicators.router,
     awards.router,
     appeals.router,
+    standards.router,
     public.router,
 ]:
     app.include_router(router, prefix="/api")

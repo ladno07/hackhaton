@@ -26,7 +26,7 @@ import {
   YAxis,
 } from "recharts";
 import { useAction, useAuth, useData, useToast } from "./state";
-import { chartColors, date, download, formats, roleNames, sexNames, today } from "./lib";
+import { chartColors, date, download, formats, roleNames, sexNames, today, trainingStages } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
@@ -49,6 +49,7 @@ const attentionGroups: [string, string, string][] = [
   ["applications", "Заявки на соревнования", "/competitions"],
   ["rank_applications", "Заявки на разряды и категории", "/ranks"],
   ["appeals", "Апелляции", "/appeals"],
+  ["stage_transfers", "Готовы к переводу на этап", "/standards"],
   ["ranks", "Истекающие разряды", "/registry"],
   ["categories", "Истекающие судейские категории", "/registry"],
   ["reports", "Сроки отчётов", "/settings"],
@@ -91,7 +92,9 @@ function AttentionPanel() {
                     <span
                       className={
                         "deadline-dot " +
-                        (i.overdue || (kind !== "rank_applications" && i.due_on <= soon)
+                        (i.overdue ||
+                        (!["rank_applications", "stage_transfers"].includes(kind) &&
+                          i.due_on <= soon)
                           ? "urgent"
                           : "")
                       }
@@ -532,6 +535,7 @@ export function History() {
 }
 
 export function ProfileEditor({ athlete, onSaved }: any) {
+  const { role } = useAuth();
   const meta = useData("/metadata");
   const action = useAction();
   const [v, setV] = useState<any>({
@@ -652,11 +656,31 @@ export function ProfileEditor({ athlete, onSaved }: any) {
           ))}
         </div>
       )}
-      <Field label="Этап подготовки">
-        <input
+      <Field
+        label="Этап подготовки"
+        hint={
+          role === "admin"
+            ? "Перевод по нормативам оформляется в разделе «Нормативы и аттестация»"
+            : "Меняет федерация по результатам аттестации"
+        }
+      >
+        <select
+          disabled={role !== "admin"}
           value={v.training_stage}
           onChange={(e) => change("training_stage", e.target.value)}
-        />
+        >
+          <option value="">Не указан</option>
+          {[
+            ...trainingStages,
+            ...(v.training_stage && !trainingStages.includes(v.training_stage)
+              ? [v.training_stage]
+              : []),
+          ].map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
       </Field>
       <div className="form-section">
         <h3>Дисциплины и годы занятий</h3>

@@ -450,3 +450,45 @@ class AwardStatusIn(Strict):
     status: Literal["candidate", "nominated", "awarded", "rejected"]
     comment: str = Field("", max_length=2000)
     order_number: str | None = Field(None, max_length=120)
+
+
+Stage = Literal["np", "ut", "ssm", "vsm"]
+
+
+class StandardIn(Strict):
+    stage: Stage
+    category: Literal["ofp", "sfp"]
+    name: str = Field(min_length=3, max_length=200)
+    unit: str = Field(min_length=1, max_length=40)
+    better: Literal["higher", "lower"]
+    threshold: float = Field(ge=0, le=1_000_000)
+    sex: Sex | None = None
+    discipline_id: int | None = None
+    source: str = Field("", max_length=2000)
+    sort_order: int = Field(0, ge=0, le=10_000)
+
+
+class StandardResultIn(Strict):
+    standard_id: int
+    value: float = Field(ge=0, le=1_000_000)
+    tested_on: date
+    comment: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def not_future(self):
+        if self.tested_on > date.today():
+            raise ValueError("Дата сдачи не может быть в будущем")
+        return self
+
+
+class StageTransferIn(Strict):
+    to_stage: Stage
+    decided_on: date
+    order_number: str = Field(min_length=1, max_length=120)
+    comment: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def not_future(self):
+        if self.decided_on > date.today():
+            raise ValueError("Дата приказа не может быть в будущем")
+        return self

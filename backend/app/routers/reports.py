@@ -12,6 +12,7 @@ from app.services.documents import OfficialDocument, export_document, MIME
 from app.services.reports import population
 from app.services.protocols import versions
 from app.services.appeals import DECISION_DAYS
+from app.services.standards import readiness
 
 router = APIRouter(tags=["Документы и аналитика"])
 HEAD = (settings.fsp_head_position, settings.fsp_head_name)
@@ -119,7 +120,7 @@ def attention(
     until = today + timedelta(days=ATTENTION_DAYS)
     items = []
 
-    def add(kind, id, title, detail, due_on, date_label, link):
+    def add(kind, id, title, detail, due_on, date_label, link, overdue=None):
         items.append(
             {
                 "kind": kind,
@@ -129,7 +130,7 @@ def attention(
                 "due_on": due_on,
                 "date_label": date_label,
                 "link": link,
-                "overdue": due_on < today,
+                "overdue": due_on < today if overdue is None else overdue,
             }
         )
 
@@ -173,6 +174,19 @@ def attention(
             "решение до",
             "/appeals",
         )
+    for athlete in db.scalars(select(Athlete).order_by(Athlete.id)):
+        state = readiness(db, athlete, today)
+        if state["ready"]:
+            add(
+                "stage_transfers",
+                athlete.id,
+                athlete.user.full_name,
+                f"Готов к переводу: {state['target_name'].lower()}",
+                state["ready_since"],
+                "нормативы выполнены",
+                "/standards",
+                overdue=False,
+            )
     for r in db.scalars(
         select(SportsRank).where(
             SportsRank.expires_on >= today, SportsRank.expires_on <= until
@@ -220,7 +234,10 @@ def attention(
         )
 
     items.sort(key=lambda x: x["due_on"])
-    kinds = ("applications", "rank_applications", "appeals", "ranks", "categories", "reports")
+    kinds = (
+        "applications", "rank_applications", "appeals", "stage_transfers",
+        "ranks", "categories", "reports",
+    )
     return {
         "window_days": ATTENTION_DAYS,
         "counts": {k: sum(i["kind"] == k for i in items) for k in kinds},

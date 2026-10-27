@@ -139,6 +139,13 @@ export const sexNames: Record<string, string> = {
   male: "Мужской",
   female: "Женский",
 };
+// training stages of the FSSP in order; athletes.training_stage holds the name
+export const trainingStages = [
+  "Этап начальной подготовки",
+  "Учебно-тренировочный этап",
+  "Этап совершенствования спортивного мастерства",
+  "Этап высшего спортивного мастерства",
+];
 export const ageRules: Record<string, string> = {
   year: "По году рождения",
   start: "На дату старта",
