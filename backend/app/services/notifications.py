@@ -164,6 +164,12 @@ def visible_in_role(db, actor, notice):
 
     parts = notice.event_key.split(":")
     kind = parts[0]
+    if kind == "passport-consent":
+        return False
+    if kind == "passport-consent-decision":
+        return actor.role == "athlete"
+    if kind == "competition-team":
+        return actor.role in {"athlete", "coach"}
     if kind in {"application", "rank-application"}:
         return False
     if kind == "deadline":

@@ -223,9 +223,16 @@ export function Registry() {
                           {a.full_name.replace("Демо · ", "").slice(0, 1)}
                         </span>
                         <div>
-                          <strong>{a.full_name.replace("Демо · ", "")}</strong>
+                          <Link
+                            className="text-link"
+                            to={`/athletes/${a.id}/profile`}
+                          >
+                            <strong>
+                              {a.full_name.replace("Демо · ", "")}
+                            </strong>
+                          </Link>
                           <small>
-                            {a.age} лет · ID {a.id}
+                            {a.age} лет · {a.public_id}
                           </small>
                         </div>
                       </div>
@@ -1009,7 +1016,12 @@ export function Ratings() {
                     </span>
                   </td>
                   <td>
-                    <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                    <Link
+                      className="text-link"
+                      to={`/athletes/${r.athlete_id}/profile`}
+                    >
+                      <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                    </Link>
                     <small>{r.age} лет</small>
                     <details>
                       <summary>Как рассчитан рейтинг</summary>
@@ -1089,7 +1101,12 @@ export function Ratings() {
         </div>
         {team.data?.map((t: any) => (
           <div className="simple-row" key={t.athlete_id}>
-            <span>{t.full_name}</span>
+            <Link
+              className="text-link"
+              to={`/athletes/${t.athlete_id}/profile`}
+            >
+              {t.full_name}
+            </Link>
             {!t.eligible && (
               <Badge value="rejected" label="Действует отстранение" />
             )}

@@ -36,9 +36,7 @@ def rating_level(status, rating_class):
 def rating_levels(db):
     """status -> type_id -> rating level, for the competition form preview."""
     types = db.scalars(select(CompetitionType)).all()
-    return {
-        s: {t.id: rating_level(s, t.rating_class) for t in types} for s in STATUSES
-    }
+    return {s: {t.id: rating_level(s, t.rating_class) for t in types} for s in STATUSES}
 
 
 def recalculate(db, season):
@@ -56,6 +54,8 @@ def recalculate(db, season):
             Competition.start_date <= date(season, 12, 31),
         )
     ):
+        if comp.entry_mode == "team" and not comp.team_rating:
+            continue
         rule = rules.get(comp.rating_level)
         points = (
             [rule.first, rule.second, rule.third][result.place - 1]

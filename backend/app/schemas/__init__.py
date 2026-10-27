@@ -64,6 +64,10 @@ class CompetitionIn(Strict):
     calendar_plan: str = Field(min_length=2, max_length=100)
     calendar_number: str = Field(min_length=1, max_length=80)
     regulation_url: HttpUrl | None = None
+    entry_mode: Literal["individual", "team"] = "individual"
+    team_min: int = Field(2, ge=1, le=50)
+    team_max: int = Field(3, ge=1, le=50)
+    team_rating: bool = False
 
     @model_validator(mode="after")
     def dates(self):
@@ -73,6 +77,8 @@ class CompetitionIn(Strict):
             or self.min_age > self.max_age
         ):
             raise ValueError("Проверьте даты и возрастные ограничения")
+        if self.team_min > self.team_max:
+            raise ValueError("Минимальный состав команды больше максимального")
         expected = "Оренбургская область" if self.status == "regional" else "ЕКП"
         if self.calendar_plan != expected:
             raise ValueError(f"Для выбранного статуса календарный план: {expected}")
@@ -115,8 +121,21 @@ class ResultIn(Strict):
     team_name: str | None = Field(None, min_length=1, max_length=120)
 
 
+class TeamResultIn(Strict):
+    team_id: int
+    place: int = Field(gt=0)
+    score: float = Field(ge=0, allow_inf_nan=False)
+
+
 class ResultsIn(Strict):
-    results: list[ResultIn] = Field(min_length=1)
+    results: list[ResultIn] = Field(default_factory=list, max_length=10000)
+    team_results: list[TeamResultIn] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def one_mode(self):
+        if bool(self.results) == bool(self.team_results):
+            raise ValueError("Передайте результаты спортсменов или команд")
+        return self
 
 
 class ProtocolCorrectionIn(ResultsIn):
@@ -275,3 +294,54 @@ class DeadlineIn(Strict):
     title: str = Field(min_length=3, max_length=240)
     due_on: date
     done: bool = False
+
+
+class TeamCreateIn(Strict):
+    name: str = Field(min_length=2, max_length=120)
+    captain_id: int
+
+
+class TeamMemberIn(Strict):
+    athlete_id: int | None = Field(None, gt=0)
+    public_id: str | None = Field(None, min_length=10, max_length=14)
+
+    @model_validator(mode="after")
+    def one_identifier(self):
+        if (self.athlete_id is None) == (self.public_id is None):
+            raise ValueError("Укажите один идентификатор спортсмена")
+        return self
+
+
+class TeamResponseIn(Strict):
+    status: Literal["accepted", "declined"]
+
+
+class TeamReviewIn(Strict):
+    status: Literal["approved", "returned"]
+    comment: str = Field("", max_length=2000)
+
+
+class TeamReopenIn(Strict):
+    reason: str = Field(min_length=5, max_length=2000)
+
+
+class PassportSettingsIn(Strict):
+    enabled: bool
+    show_results: bool = True
+    show_rating: bool = True
+    show_team: bool = True
+    show_rusada: bool = False
+    consent: bool = False
+
+
+class ProfileVisibilityIn(Strict):
+    show_results: bool = True
+    show_rating: bool = True
+    show_ranks: bool = True
+    show_disciplines: bool = True
+    show_organization: bool = True
+    show_municipality: bool = True
+    show_team: bool = True
+    show_rusada: bool = False
+    show_training_stage: bool = False
+    show_training_years: bool = False

@@ -10,6 +10,45 @@ api.interceptors.request.use((config) => {
   if (role) config.headers["X-Active-Role"] = role;
   return config;
 });
+let refreshingSession: Promise<any> | null = null;
+export function refreshSession() {
+  if (!refreshingSession) {
+    refreshingSession = axios.post("/api/auth/refresh").then(({ data }) => {
+      const previousUser = sessionStorage.getItem("orencode.user");
+      sessionStorage.setItem("orencode.user", String(data.user.id));
+      sessionStorage.setItem("token", data.access_token);
+      const savedRole = localStorage.getItem("orencode.role") || sessionStorage.getItem("role");
+      const role = data.user.roles.includes(savedRole) ? savedRole : data.user.roles[0];
+      sessionStorage.setItem("role", role);
+      window.dispatchEvent(new CustomEvent("orencode:session-refreshed", { detail: { accountChanged: !!previousUser && previousUser !== String(data.user.id) } }));
+      return data;
+    }).finally(() => { refreshingSession = null; });
+  }
+  return refreshingSession;
+}
+export async function endSession() {
+  // Let an in-flight refresh finish before revoking its browser session.
+  await refreshingSession?.catch(() => {});
+  await axios.post("/api/auth/logout");
+}
+api.interceptors.response.use((response) => response, async (error) => {
+  const config = error.config;
+  if (error.response?.status !== 401 || !config || config._sessionRetry || ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].includes(config.url)) {
+    return Promise.reject(error);
+  }
+  config._sessionRetry = true;
+  try {
+    const data = await refreshSession();
+    config.headers.Authorization = `Bearer ${data.access_token}`;
+    return api.request(config);
+  } catch (refreshError: any) {
+    if (refreshError.response?.status === 401) {
+      sessionStorage.removeItem("token");
+      window.dispatchEvent(new Event("orencode:session-ended"));
+    }
+    return Promise.reject(refreshError);
+  }
+});
 export const errorText = (err: any) => {
   const d = err?.response?.data?.detail;
   return typeof d === "string"

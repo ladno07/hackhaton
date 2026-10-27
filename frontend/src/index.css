@@ -2553,3 +2553,49 @@ td a:hover {
 .protocol-version .inline-error {
   margin: 0 24px 14px;
 }
+
+.competition-team {
+  border-top: 1px solid #e5e9f0;
+  padding-bottom: 20px;
+}
+.team-controls {
+  padding: 18px 24px;
+  display: grid;
+  gap: 14px;
+}
+.team-controls .inline-form {
+  padding: 0;
+  flex-wrap: wrap;
+}
+.team-controls p {
+  color: #64748b;
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .team-controls {
+    padding: 16px;
+  }
+}
+
+.team-invite {
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e9f0;
+}
+.invite-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #e5e9f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.invite-card code {
+  font-size: 15px;
+  color: #b52340;
+}
+.invite-card span {
+  color: #64748b;
+  font-size: 13px;
+}

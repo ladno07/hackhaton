@@ -46,10 +46,26 @@ import {
 import { Competitions, CompetitionDetail } from "./competitions";
 import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 
+import {
+  AthleteProfileView,
+  PrivateCertificate,
+  LegacyPublicProfile,
+} from "./public-passport";
 import { AthleteSummary } from "./athlete-summary";
+
+import { CertificateVerification } from "./certificate-verification";
 
 function Login() {
   const auth = useAuth();
+  const loginLocation = useLocation();
+  const returnTo =
+    new URLSearchParams(loginLocation.search).get("returnTo") || "/";
+  const safeReturn =
+    /^\/(?:competitions(?:\/[0-9]+)?|certificates\/[0-9]+(?:\?version=[0-9]+)?|athletes\/[0-9]+\/profile)$/.test(
+      returnTo,
+    )
+      ? returnTo
+      : "/";
   const [register, setRegister] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<any>({
@@ -79,7 +95,8 @@ function Login() {
     onSuccess: auth.login,
     onError: (e) => setError(errorText(e)),
   });
-  if (auth.token) return <Navigate to="/" replace />;
+  if (auth.restoring) return <div className="state full-screen">Восстанавливаем вход…</div>;
+  if (auth.token) return <Navigate to={safeReturn} replace />;
   return (
     <div className="auth-page">
       <section className="auth-story">
@@ -344,7 +361,17 @@ function Layout() {
   }, [location.pathname]);
   const navigate = useNavigate();
   const notices = useData("/notifications");
-  if (!auth.token) return <Navigate to="/login" replace />;
+  if (auth.restoring) return <div className="state full-screen">Восстанавливаем вход…</div>;
+  if (!auth.token)
+    return (
+      <Navigate
+        to={
+          "/login?returnTo=" +
+          encodeURIComponent(location.pathname + location.search)
+        }
+        replace
+      />
+    );
   if (auth.loading)
     return <div className="state full-screen">Открываем кабинет…</div>;
   if (auth.error)
@@ -420,7 +447,7 @@ function Layout() {
             </button>
             <span>Платформа ФСП</span>
             <span className="breadcrumb-slash">/</span>
-            <strong>{current?.label || "Уведомления"}</strong>
+            <strong>{current?.label || (location.pathname.startsWith("/athletes/") ? "Профиль спортсмена" : location.pathname.startsWith("/certificates/") ? "Справка об участии" : "Уведомления")}</strong>
           </div>
           <div className="topbar-right">
             <label className="role-switch">
@@ -508,8 +535,21 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/check-certificate/:checkToken" element={<CertificateVerification />} />
+      <Route path="/p/:slug" element={<LegacyPublicProfile />} />
+      <Route path="/verify/:digest" element={<LegacyPublicProfile />} />
+      <Route path="/passport-preview" element={<LegacyPublicProfile />} />
       <Route element={<Layout />}>
         <Route index element={<Overview />} />
+        <Route path="athletes/:id/profile" element={<AthleteProfileView />} />
+        <Route
+          path="certificates/:id"
+          element={
+            <Guard roles={["athlete", "coach", "admin"]}>
+              <PrivateCertificate />
+            </Guard>
+          }
+        />
         <Route path="competitions" element={<Competitions />} />
         <Route path="competitions/:id" element={<CompetitionDetail />} />
         <Route
@@ -538,7 +578,11 @@ export default function App() {
         />
         <Route
           path="coaching/athletes/:id"
-          element={<Guard roles={["coach", "admin"]}><AthleteSummary /></Guard>}
+          element={
+            <Guard roles={["coach", "admin"]}>
+              <AthleteSummary />
+            </Guard>
+          }
         />
         <Route
           path="assignments"

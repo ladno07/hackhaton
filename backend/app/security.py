@@ -7,16 +7,17 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
-from app.models import User
+from app.models import User, LoginSession, now
 
 password_hash = PasswordHash.recommended()
 bearer = HTTPBearer()
 
 
-def token(user: User):
+def token(user: User, session_id: str | None = None):
     return jwt.encode(
         {
             "sub": str(user.id),
+            **({"sid": session_id} if session_id else {}),
             "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_minutes),
         },
         settings.jwt_secret,
@@ -40,6 +41,14 @@ def current_actor(
             credentials.credentials, settings.jwt_secret, algorithms=["HS256"]
         )
         user = db.get(User, int(payload["sub"]))
+        if payload.get("sid"):
+            session = db.get(LoginSession, payload["sid"])
+            if (
+                not session
+                or session.user_id != int(payload["sub"])
+                or session.expires_at.replace(tzinfo=timezone.utc) <= now()
+            ):
+                raise HTTPException(401, "Сессия завершена. Войдите снова")
     except (jwt.PyJWTError, ValueError, KeyError):
         raise HTTPException(401, "Сессия истекла. Войдите снова")
     if not user:

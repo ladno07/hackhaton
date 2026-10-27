@@ -16,6 +16,7 @@ from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify
 from app.services.ratings import rating_levels
+from app.services.athlete_ids import public_athlete_id
 
 router = APIRouter(tags=["Реестры и профили"])
 
@@ -33,6 +34,7 @@ def athlete_view(db, athlete):
     )
     return {
         **row(athlete),
+        "public_id": public_athlete_id(athlete.id),
         "full_name": athlete.user.full_name,
         "sex": athlete.user.sex,
         "age": age_at(athlete.user.birth_date),
@@ -111,6 +113,7 @@ def athletes(
                 k: item[k]
                 for k in [
                     "id",
+                    "public_id",
                     "full_name",
                     "municipality",
                     "organization",
@@ -222,6 +225,7 @@ def links(
         {
             **row(x),
             "athlete": db.get(Athlete, x.athlete_id).user.full_name,
+            "athlete_public_id": public_athlete_id(x.athlete_id),
             "coach": db.get(Coach, x.coach_id).user.full_name,
             "history": [
                 row(h)
