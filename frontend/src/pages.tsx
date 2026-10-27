@@ -1053,15 +1053,18 @@ export function Coaching() {
   );
 }
 export function Notifications() {
+  const { role } = useAuth();
   const q = useData("/notifications");
   const action = useAction();
   return (
     <>
       <PageTitle
         title="Уведомления"
-        description="События платформы и напоминания. Доставка на почту и в подключённый Telegram."
+        description={role === "ministry"
+          ? "События платформы и напоминания. Доставка на почту."
+          : "События платформы и напоминания. Доставка на почту и в подключённый Telegram."}
       />
-      <TelegramConnection />
+      {role !== "ministry" && <TelegramConnection />}
       <section className="panel">
         <State query={q}>
           {q.data?.length ? (
@@ -1091,7 +1094,7 @@ export function Notifications() {
                       : n.last_error
                         ? "Ошибка отправки; повторим автоматически"
                         : "В очереди на отправку"}
-                    <TelegramDeliveryStatus delivery={n.telegram_delivery} />
+                    {role !== "ministry" && <TelegramDeliveryStatus delivery={n.telegram_delivery} />}
                   </small>
                 </div>
                 {!n.read_at && (

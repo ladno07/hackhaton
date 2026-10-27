@@ -90,7 +90,7 @@ def claim(db, token, chat_id, confirm=False, at=None):
     if existing or (link and link.active):
         raise ValueError("Аккаунт уже привязан. Сначала отключите существующую привязку.")
     user = db.get(User, obj.user_id)
-    roles = sorted(r.id for r in user.roles)
+    roles = sorted(r.id for r in user.roles if r.id != "ministry")
     if not roles:
         raise ValueError("У аккаунта нет доступных ролей.")
     if not confirm:

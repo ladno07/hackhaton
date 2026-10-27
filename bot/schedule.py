@@ -18,7 +18,7 @@ def roles_for(db, user_id):
     user = db.get(User, user_id)
     if not user:
         return set()
-    roles = set(db.scalars(select(UserRole.role_id).where(UserRole.user_id == user_id)))
+    roles = set(db.scalars(select(UserRole.role_id).where(UserRole.user_id == user_id))) - {"ministry"}
     for role, model in (("coach", Coach), ("judge", Judge)):
         card = db.scalar(select(model).where(model.user_id == user_id))
         if role in roles and (not card or card.archived_at):

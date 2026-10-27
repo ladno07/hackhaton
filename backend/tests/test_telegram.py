@@ -567,13 +567,29 @@ def test_failed_screen_send_keeps_previous_message():
     assert not api.calls
 
 
-def test_bot_handles_ministry_role_after_merge(env):
+def test_bot_excludes_ministry_role(env):
+    _, factory, _, users = env
+    with factory() as db:
+        link = connect(db, users["admin"]["id"])
+        user = db.get(User, link.user_id)
+        assert "ministry" not in roles_for(db, user.id)
+        body, keyboard = render(db, link, user, "roles", 0)
+        assert "ministry" not in str(keyboard) and "Минспорт" not in str(keyboard)
+        body, _ = render(db, link, user, "profile", 0)
+        assert "Минспорт" not in body
+        link.role = "ministry"
+        render(db, link, user, "menu", 0)
+        assert link.role != "ministry"
+        api = FakeTelegram()
+        handle(db, api, private_callback("role:ministry"))
+        assert "недоступен" in api.messages[-1][1]
+
+
+def test_ministry_only_account_cannot_connect_bot(env):
     _, factory, _, _ = env
     with factory() as db:
         user = db.scalar(select(User).where(User.email == "minsport@demo.example"))
-        link = connect(db, user.id)
-        for section in ("menu", "profile", "roles", "competitions", "deadlines"):
-            body, keyboard = render(db, link, user, section, 0)
-            assert body and keyboard
-        body, _ = render(db, link, user, "applications", 0)
-        assert "недоступен" in body
+        assert not roles_for(db, user.id)
+        code = token_for(db, user.id)
+        with pytest.raises(ValueError, match="нет доступных ролей"):
+            claim(db, code, 101)
