@@ -166,12 +166,7 @@ export function Overview() {
                   to={"/competitions/" + c.id}
                 >
                   <div className="date-tile">
-                    <strong>{new Date(c.start_date).getDate()}</strong>
-                    <span>
-                      {new Date(c.start_date).toLocaleDateString("ru-RU", {
-                        month: "short",
-                      })}
-                    </span>
+                    <time dateTime={c.start_date}>{date(c.start_date)}</time>
                   </div>
                   <div className="upcoming-copy">
                     <small>{c.discipline}</small>
@@ -968,7 +963,7 @@ export function Audit() {
                 )
                 .map((x: any) => (
                   <tr key={x.id}>
-                    <td>{new Date(x.created_at).toLocaleString("ru-RU")}</td>
+                    <td>{date(x.created_at)} {new Date(x.created_at).toLocaleTimeString("ru-RU")}</td>
                     <td>{x.full_name}</td>
                     <td>{roleNames[x.active_role]}</td>
                     <td>

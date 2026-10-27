@@ -21,6 +21,7 @@ from app.schemas import (
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify, admins, athlete_audience
+from app.services.competition_notifications import registration_recipients
 from app.services.ratings import recalculate, rating_level
 from app.services.protocols import (
     add_version,
@@ -217,7 +218,7 @@ def change_schedule(
     comp.revision += 1
     if comp.state != "draft":
         notify(db, audience, "Изменилось расписание соревнования",
-               f"{comp.title}\n{comp.start_date} — {comp.end_date}, "
+               f"{comp.title}\n{comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}, "
                f"{comp.start_time.strftime('%H:%M') if comp.start_time else 'время уточняется'} ({comp.timezone})",
                f"competition-schedule:{comp.id}:{comp.revision}")
         for notice in db.scalars(select(Notification).where(Notification.event_key == f"competition-schedule:{comp.id}:{comp.revision}")):
@@ -253,7 +254,7 @@ def set_state(
     if data.state == "open":
         notify(
             db,
-            db.scalars(select(User.id)).all(),
+            registration_recipients(db, comp),
             "Открыта регистрация",
             comp.title,
             f"competition-open:{comp.id}:{comp.revision}",
@@ -357,7 +358,7 @@ async def upload_regulation(
         ).all()
         notify(
             db,
-            [u for a in athlete_ids for u in athlete_audience(db, a)],
+            [u for a in athlete_ids for u in athlete_audience(db, a, comp.discipline_id)],
             "Обновлено положение",
             comp.title,
             f"competition-regulation:{comp.id}:{comp.revision}",
@@ -467,12 +468,14 @@ def moderate(
     if comp.state == "published" or obj.status != "pending":
         raise HTTPException(409, "Заявка уже рассмотрена или протокол опубликован")
     obj.status, obj.comment = data.status, data.comment
+    obj.approved_at = now() if data.status == "approved" else None
     audit(db, actor, "Рассмотрение заявки", obj, data.model_dump())
     notify(
         db,
-        athlete_audience(db, obj.athlete_id),
+        athlete_audience(db, obj.athlete_id, comp.discipline_id),
         "Статус заявки изменён",
-        f"{comp.title}: {'одобрена' if data.status == 'approved' else 'отклонена'}. {data.comment or ''}",
+        f"{comp.title}: {'одобрена' if data.status == 'approved' else 'отклонена'}. {data.comment or ''}\n"
+        f"Даты соревнования: {comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}",
         f"application-decision:{obj.id}",
     )
     return row(obj)
@@ -556,7 +559,7 @@ def publish(
     for athlete_id in approved:
         notify(
             db,
-            athlete_audience(db, athlete_id),
+            athlete_audience(db, athlete_id, comp.discipline_id),
             "Опубликован протокол",
             comp.title,
             f"protocol:{comp.id}:{athlete_id}",
@@ -606,7 +609,7 @@ def correct(
     for athlete_id in current:
         notify(
             db,
-            athlete_audience(db, athlete_id),
+            athlete_audience(db, athlete_id, comp.discipline_id),
             "Протокол исправлен",
             f"{comp.title}: редакция {version.version}. {data.reason}",
             f"protocol:{comp.id}:{athlete_id}:v{version.version}",

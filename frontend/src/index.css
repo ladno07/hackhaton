@@ -1160,6 +1160,7 @@ td a:hover {
   color: #bb2e40;
 }
 .date-tile {
+  padding: 0 8px;
   background: #f7f8fa;
   border: 1px solid #e9ecf1;
   border-radius: 6px;
@@ -1175,6 +1176,14 @@ td a:hover {
   line-height: 1.15;
   font-weight: 600;
   color: #495164;
+}
+.date-tile time,
+.competition-date time {
+  font-size: 12px;
+  font-weight: 600;
+  color: #495164;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .date-tile span {
   font-size: 9px;
@@ -1355,6 +1364,7 @@ td a:hover {
   background: #fdfafb;
 }
 .competition-date {
+  padding: 0 8px;
   display: flex;
   flex-direction: column;
   align-items: center;

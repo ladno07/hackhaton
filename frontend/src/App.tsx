@@ -342,7 +342,7 @@ function Layout() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
   const navigate = useNavigate();
-  const notices = useData("/notifications");
+  const notices = useData("/notifications", !!auth.token);
   if (!auth.token) return <Navigate to="/login" replace />;
   if (auth.loading)
     return <div className="state full-screen">Открываем кабинет…</div>;

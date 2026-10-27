@@ -142,7 +142,7 @@ def decide_rank(
         data.model_dump(mode="json"),
     )
     audience = (
-        athlete_audience(db, obj.athlete_id)
+        athlete_audience(db, obj.athlete_id, db.get(Competition, db.get(CompetitionResult, obj.result_id).competition_id).discipline_id)
         if obj.athlete_id
         else [db.get(Judge, obj.judge_id).user_id]
     )
@@ -385,16 +385,27 @@ def list_deadlines(
     actor: Actor = Depends(current_actor), db: Session = Depends(get_db)
 ):
     today = date.today()
-    ids = visible_athletes(db, actor)
+    ids = visible_athletes(db, actor) if actor.role in ("athlete", "coach") else set()
     items = []
     for c in db.scalars(
         select(Competition).where(
-            Competition.state == "open", Competition.deadline >= today
+            Competition.state.in_(["open", "closed"]), Competition.end_date >= today
         )
     ):
-        items.append(
-            {"kind": "competition", "id": c.id, "title": c.title, "due_on": c.deadline}
-        )
+        if actor.role == "judge":
+            involved = bool(db.get(CompetitionJudge, (c.id, own(db, Judge, actor).id)))
+        else:
+            involved = any(
+                app.athlete_id in ids and _deadline_access(db, actor, app.athlete_id, c.discipline_id)
+                for app in db.scalars(select(CompetitionApplication).where(
+                    CompetitionApplication.competition_id == c.id, CompetitionApplication.status == "approved")))
+        if not involved:
+            continue
+        if c.start_date >= today:
+            items.append({"kind": "competition_start", "id": c.id,
+                          "title": "Начало: " + c.title, "due_on": c.start_date})
+        items.append({"kind": "competition_end", "id": c.id,
+                      "title": "Окончание: " + c.title, "due_on": c.end_date})
     for r in db.scalars(select(SportsRank).where(SportsRank.athlete_id.in_(ids))):
         items.append(
             {
@@ -404,10 +415,8 @@ def list_deadlines(
                 "due_on": r.expires_on,
             }
         )
-    if actor.role in ("judge", "admin"):
-        query = select(JudgeCategory)
-        if actor.role == "judge":
-            query = query.where(JudgeCategory.judge_id == own(db, Judge, actor).id)
+    if actor.role == "judge":
+        query = select(JudgeCategory).where(JudgeCategory.judge_id == own(db, Judge, actor).id)
         for c in db.scalars(query):
             items.append(
                 {
@@ -433,6 +442,14 @@ def list_deadlines(
             }
         )
     return sorted(items, key=lambda x: x["due_on"])
+
+
+def _deadline_access(db, actor, athlete_id, discipline_id):
+    try:
+        can_athlete(db, actor, athlete_id, discipline_id)
+        return True
+    except HTTPException:
+        return False
 
 
 @router.post("/deadlines", status_code=201)

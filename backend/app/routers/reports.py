@@ -195,7 +195,7 @@ def protocol(
         rows,
         fmt,
         f"protocol-{comp.id}-v{picked.version}",
-        f"{edition}. {comp.start_date} — {comp.end_date}. {comp.location}. {comp.calendar_plan} № {comp.calendar_number}. Судейская коллегия: {judges or 'не назначена'}",
+        f"{edition}. {comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}. {comp.location}. {comp.calendar_plan} № {comp.calendar_number}. Судейская коллегия: {judges or 'не назначена'}",
     )
 
 

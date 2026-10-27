@@ -518,13 +518,7 @@ export function Competitions() {
                   className="competition-card"
                 >
                   <div className="competition-date">
-                    <strong>{new Date(c.start_date).getDate()}</strong>
-                    <span>
-                      {new Date(c.start_date).toLocaleDateString("ru-RU", {
-                        month: "long",
-                      })}
-                    </span>
-                    <small>{new Date(c.start_date).getFullYear()}</small>
+                    <time dateTime={c.start_date}>{date(c.start_date)}</time>
                   </div>
                   <div className="competition-main">
                     <div className="competition-tags">
@@ -959,7 +953,7 @@ export function CompetitionDetail() {
                         value={athlete}
                         onChange={(e) => setAthlete(e.target.value)}
                       >
-                        <option value="">Выберите подопечного</option>
+                        <option value="">Выберите спортсмена</option>
                         {athletes.data?.map((a: any) => (
                           <option key={a.id} value={a.id}>
                             {a.full_name}

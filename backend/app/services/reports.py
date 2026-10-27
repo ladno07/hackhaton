@@ -122,6 +122,8 @@ def export_document(title, headers, rows, fmt, subtitle=""):
             )
             ws.column_dimensions[column[0].column_letter].width = width
             for c in column:
+                if isinstance(c.value, date):
+                    c.number_format = "dd.mm.yyyy"
                 c.alignment = Alignment(vertical="top", wrap_text=True)
         ws.freeze_panes = "A4"
         ws.auto_filter.ref = (
@@ -140,7 +142,7 @@ def export_document(title, headers, rows, fmt, subtitle=""):
             c.text = str(h)
         for values in rows:
             for c, v in zip(table.add_row().cells, values):
-                c.text = str(v if v is not None else "")
+                c.text = v.strftime("%d.%m.%Y") if isinstance(v, date) else str(v if v is not None else "")
         doc.add_paragraph(
             "Федерация спортивного программирования Оренбургской области. Демонстрационные данные."
         )
@@ -155,7 +157,7 @@ def export_document(title, headers, rows, fmt, subtitle=""):
         heading = ParagraphStyle(
             "heading", parent=style, fontSize=16, leading=21, spaceAfter=12
         )
-        wrap = lambda v: Paragraph(escape(str(v if v is not None else "")), style)
+        wrap = lambda v: Paragraph(escape(v.strftime("%d.%m.%Y") if isinstance(v, date) else str(v if v is not None else "")), style)
         document = SimpleDocTemplate(
             out,
             pagesize=landscape(A4),

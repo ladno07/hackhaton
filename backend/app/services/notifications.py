@@ -8,12 +8,25 @@ from sqlalchemy import select
 from app.config import settings
 from app.db import SessionLocal
 from app.models import *
+from app.services.competition_notifications import (
+    admitted_athletes, competition_in_progress, registration_recipients, reminder_stage,
+)
+from app.services.telegram_link import utc
 
 logger = logging.getLogger(__name__)
 
 
-def notify(db, user_ids, title, body, key):
+def is_registration_notice(notice):
+    parts = notice.event_key.split(":")
+    return parts[0] == "competition-open" or parts[:2] in (
+        ["deadline", "comp"], ["tg-reminder", "registration"])
+
+
+def notify(db, user_ids, title, body, key, occurred_at=None):
     for user_id in set(user_ids):
+        user = db.get(User, user_id)
+        if occurred_at and (not user or utc(occurred_at) < utc(user.created_at)):
+            continue
         if not db.scalar(
             select(Notification.id).where(
                 Notification.user_id == user_id, Notification.event_key == key
@@ -27,13 +40,16 @@ def admins(db):
     return db.scalars(select(UserRole.user_id).where(UserRole.role_id == "admin")).all()
 
 
-def athlete_audience(db, athlete_id):
+def athlete_audience(db, athlete_id, discipline_id=None):
     athlete = db.get(Athlete, athlete_id)
-    coaches = db.scalars(
+    query = (
         select(Coach.user_id)
         .join(AthleteCoach, AthleteCoach.coach_id == Coach.id)
-        .where(AthleteCoach.athlete_id == athlete_id, AthleteCoach.status == "active")
-    ).all()
+        .where(AthleteCoach.athlete_id == athlete_id, AthleteCoach.status == "active", Coach.archived_at.is_(None))
+    )
+    if discipline_id is not None:
+        query = query.where(AthleteCoach.discipline_id == discipline_id)
+    coaches = db.scalars(query).all()
     return [athlete.user_id, *coaches]
 
 
@@ -41,17 +57,22 @@ def deadlines(db):
     today = date.today()
     for comp in db.scalars(
         select(Competition).where(
-            Competition.state == "open",
-            Competition.deadline >= today,
-            Competition.deadline <= today + timedelta(days=7),
+            Competition.state.in_(["open", "closed"]),
+            Competition.end_date >= today,
+            Competition.end_date <= today + timedelta(days=1),
         )
     ):
+        stage = reminder_stage(comp.end_date, (1, 0), timezone=comp.timezone)
+        if not stage or not competition_in_progress(comp):
+            continue
+        days, moment = stage
         notify(
             db,
-            db.scalars(select(User.id)).all(),
-            "Завершается приём заявок",
-            f"{comp.title}: до {comp.deadline}",
-            f"deadline:comp:{comp.id}:{comp.deadline}",
+            [uid for uid, since in admitted_athletes(db, comp).items() if utc(since) <= utc(moment)],
+            "Соревнование завершается",
+            f"{comp.title}: окончание {comp.end_date:%d.%m.%Y}",
+            f"deadline:end:{comp.id}:{comp.end_date}:{days}",
+            occurred_at=moment,
         )
     for rank in db.scalars(
         select(SportsRank).where(
@@ -59,12 +80,17 @@ def deadlines(db):
             SportsRank.expires_on <= today + timedelta(days=30),
         )
     ):
+        stage = reminder_stage(rank.expires_on, (30, 7, 1))
+        if not stage:
+            continue
+        days, moment = stage
         notify(
             db,
-            [*admins(db), *athlete_audience(db, rank.athlete_id)],
+            athlete_audience(db, rank.athlete_id, rank.discipline_id),
             "Истекает спортивный разряд",
-            f"{rank.name}, срок: {rank.expires_on}",
-            f"deadline:rank:{rank.id}:{rank.expires_on}",
+            f"{rank.name}, срок: {rank.expires_on:%d.%m.%Y}",
+            f"deadline:rank:{rank.id}:{rank.expires_on}:{days}",
+            occurred_at=moment,
         )
     for cat in db.scalars(
         select(JudgeCategory).where(
@@ -74,9 +100,9 @@ def deadlines(db):
     ):
         notify(
             db,
-            [*admins(db), db.get(Judge, cat.judge_id).user_id],
+            [db.get(Judge, cat.judge_id).user_id],
             "Истекает судейская категория",
-            f"{cat.name}, срок: {cat.expires_on}",
+            f"{cat.name}, срок: {cat.expires_on:%d.%m.%Y}",
             f"deadline:category:{cat.id}:{cat.expires_on}",
         )
     for item in db.scalars(
@@ -90,7 +116,7 @@ def deadlines(db):
             db,
             admins(db),
             "Приближается срок",
-            f"{item.title}: {item.due_on}",
+            f"{item.title}: {item.due_on:%d.%m.%Y}",
             f"deadline:custom:{item.id}:{item.due_on}",
         )
     feb = date(today.year if today.month == 1 else today.year + 1, 2, 1)
@@ -99,7 +125,7 @@ def deadlines(db):
             db,
             admins(db),
             "Ходатайства на премии Губернатора",
-            f"Срок подачи: {feb}",
+            f"Срок подачи: {feb:%d.%m.%Y}",
             f"deadline:governor:{feb.year}",
         )
 
@@ -109,11 +135,16 @@ def deliver(db):
         select(Notification)
         .where(Notification.mailed_at.is_(None))
         .order_by(Notification.id)
-        .limit(50)
-    ).all()
-    if not pending:
-        return
+    ).yield_per(50)
+    attempts = 0
     for notice in pending:
+        user = db.get(User, notice.user_id)
+        from app.security import Actor
+        if not any(visible_in_role(db, Actor(user, role.id), notice) for role in user.roles):
+            continue
+        if attempts >= 50:
+            break
+        attempts += 1
         notice.attempts += 1
         try:
             message = EmailMessage()
@@ -159,9 +190,29 @@ async def worker():
 
 def visible_in_role(db, actor, notice):
     """Account ownership is checked by the router; this additionally scopes role-specific events."""
+    parts = notice.event_key.split(":")
+    if is_registration_notice(notice):
+        if actor.role != "athlete" or parts[0] != "competition-open":
+            return False
+        comp = db.get(Competition, int(parts[1] if parts[0] == "competition-open" else parts[2]))
+        return bool(comp and actor.user.id in registration_recipients(
+            db, comp, exclude_applied=parts[0] != "competition-open"))
     if actor.role == "admin":
-        return True
+        if parts[0] == "deadline":
+            return parts[1] in {"custom", "governor"}
+        if parts[0] == "tg-reminder":
+            return parts[1] in {"report", "governor"}
+        return parts[0] not in {"application-decision", "rank-decision", "judge", "protocol",
+                                 "competition-schedule", "competition-regulation", "link", "link-change"}
     from app.services.common import visible_athletes, own
+
+    def follows(athlete_id, discipline_id):
+        from app.services.common import can_athlete
+        try:
+            can_athlete(db, actor, athlete_id, discipline_id)
+            return True
+        except HTTPException:
+            return False
 
     parts = notice.event_key.split(":")
     kind = parts[0]
@@ -187,6 +238,11 @@ def visible_in_role(db, actor, notice):
         comp = db.get(Competition, entity_id)
         if not comp:
             return False
+        from zoneinfo import ZoneInfo
+        if comp.state not in ("open", "closed") or now().astimezone(ZoneInfo(comp.timezone)).date() > comp.end_date:
+            return False
+        if family == "end" and not competition_in_progress(comp):
+            return False
         if actor.role == "judge":
             return bool(family == "start" and db.get(CompetitionJudge, (comp.id, own(db, Judge, actor).id)))
         # Only active links in the competition's discipline give coaches access.
@@ -195,7 +251,9 @@ def visible_in_role(db, actor, notice):
             athletes = set(db.scalars(select(AthleteCoach.athlete_id).where(
                 AthleteCoach.coach_id == own(db, Coach, actor).id,
                 AthleteCoach.status == "active", AthleteCoach.discipline_id == comp.discipline_id)))
-        if family == "start":
+        if family in {"start", "end"}:
+            if family == "end" and actor.role != "athlete":
+                return False
             return bool(db.scalar(select(CompetitionApplication.id).where(
                 CompetitionApplication.competition_id == comp.id,
                 CompetitionApplication.athlete_id.in_(athletes), CompetitionApplication.status == "approved")))
@@ -203,11 +261,15 @@ def visible_in_role(db, actor, notice):
     if kind in {"application", "rank-application"}:
         return False
     if kind == "deadline":
+        if parts[1] == "end":
+            comp = db.get(Competition, int(parts[2]))
+            return bool(actor.role == "athlete" and comp and competition_in_progress(comp)
+                        and actor.user.id in admitted_athletes(db, comp))
         if parts[1] in {"custom", "governor"}:
             return False
         if parts[1] == "rank":
             rank = db.get(SportsRank, int(parts[2]))
-            return bool(rank and rank.athlete_id in visible_athletes(db, actor))
+            return bool(rank and follows(rank.athlete_id, rank.discipline_id))
         if parts[1] == "category":
             cat = db.get(JudgeCategory, int(parts[2]))
             return bool(
@@ -226,11 +288,22 @@ def visible_in_role(db, actor, notice):
         return False
     if kind == "application-decision":
         application = db.get(CompetitionApplication, int(parts[1]))
+        comp = db.get(Competition, application.competition_id) if application else None
         return bool(
-            application and application.athlete_id in visible_athletes(db, actor)
+            comp and follows(application.athlete_id, comp.discipline_id)
         )
     if kind == "protocol":
-        return int(parts[2]) in visible_athletes(db, actor)
+        comp = db.get(Competition, int(parts[1]))
+        return bool(comp and follows(int(parts[2]), comp.discipline_id))
+    if kind in {"competition-schedule", "competition-regulation"}:
+        comp = db.get(Competition, int(parts[1]))
+        if not comp or comp.state == "draft":
+            return False
+        if actor.role == "judge":
+            return bool(kind == "competition-schedule" and db.get(CompetitionJudge, (comp.id, own(db, Judge, actor).id)))
+        return any(follows(app.athlete_id, comp.discipline_id) for app in db.scalars(select(CompetitionApplication).where(
+            CompetitionApplication.competition_id == comp.id,
+            CompetitionApplication.status == "approved" if kind == "competition-schedule" else CompetitionApplication.status != "rejected")))
     if kind == "judge":
         return actor.role == "judge" and int(parts[2]) == own(db, Judge, actor).id
     if kind == "rank-decision":
@@ -242,5 +315,7 @@ def visible_in_role(db, actor, notice):
                 actor.role == "judge"
                 and application.judge_id == own(db, Judge, actor).id
             )
-        return application.athlete_id in visible_athletes(db, actor)
+        result = db.get(CompetitionResult, application.result_id)
+        comp = db.get(Competition, result.competition_id) if result else None
+        return bool(comp and follows(application.athlete_id, comp.discipline_id))
     return True

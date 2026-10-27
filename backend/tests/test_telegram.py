@@ -226,18 +226,23 @@ def test_latest_reminder_and_revoked_admission(env):
                        for r in current_reminders(db, later).values())
 
 
-def test_deadline_eligibility_and_application_exclusion(env):
+def test_competition_reminders_require_approved_application(env):
     start = date.today() + timedelta(days=10)
     comp = competition_at(env, start, accepted=False)
     _, factory, _, users = env
     at = datetime.combine(start - timedelta(days=3), time(9), ZoneInfo("Asia/Yekaterinburg"))
     with factory() as db:
         uid = users["athlete"]["id"]
-        assert any(r.user_id == uid and r.key.startswith(f"tg-reminder:registration:{comp['id']}:") for r in current_reminders(db, at).values())
-        db.add(CompetitionApplication(competition_id=comp["id"], athlete_id=users["athlete"]["athlete_id"],
-                                     submitted_by=uid, status="pending"))
+        assert not any(r.user_id == uid and r.key.startswith(f"tg-reminder:start:{comp['id']}:") for r in current_reminders(db, at).values())
+        application = CompetitionApplication(competition_id=comp["id"], athlete_id=users["athlete"]["athlete_id"],
+                                             submitted_by=uid, status="pending")
+        db.add(application)
         db.flush()
         assert not any(r.user_id == uid and r.key.startswith(f"tg-reminder:registration:{comp['id']}:") for r in current_reminders(db, at).values())
+        assert not any(r.user_id == uid and r.key.startswith(f"tg-reminder:start:{comp['id']}:") for r in current_reminders(db, at).values())
+        application.status, application.approved_at = "approved", at - timedelta(days=1)
+        db.flush()
+        assert any(r.user_id == uid and r.key.startswith(f"tg-reminder:start:{comp['id']}:") for r in current_reminders(db, at).values())
 
 
 def test_schedule_api_and_stale_delivery(env):
@@ -299,11 +304,11 @@ def test_discipline_scoped_coach_judge_and_role_removal(env):
             return {r.user_id for r in current_reminders(db, at).values() if r.key.startswith(f"tg-reminder:start:{comp['id']}:")}
 
         assert coach_uid not in recipients()
-        assert judge_uid in recipients()
+        assert judge_uid not in recipients()
         relation = AthleteCoach(athlete_id=aid, coach_id=coach_id, discipline_id=1, status="active")
         db.add(relation)
         db.flush()
-        assert coach_uid in recipients()
+        assert coach_uid not in recipients()
         relation.status = "ended"
         db.flush()
         assert coach_uid not in recipients()
@@ -337,8 +342,7 @@ def test_demo_workflow_delivers_decision_judge_and_protocol(env):
     judge_messages = [text for chat, text, _ in api.messages if chat == 102]
     assert any("одобрена" in text and "Допущен" in text for text in athlete_messages)
     assert any("Опубликован протокол" in text for text in athlete_messages)
-    assert any("Главный судья" in text for text in judge_messages)
-    assert not any("Допущен" in text for text in judge_messages)
+    assert not judge_messages
 
 
 def private_message(text, update_id=1, chat_id=101):
@@ -468,10 +472,10 @@ def test_menu_order_links_and_only_start_command(env, monkeypatch):
     from bot.views import menu
     from bot.__main__ import COMMANDS
     assert COMMANDS == [{"command": "start", "description": "Открыть меню"}]
-    labels = [row[0]["text"] for row in menu("admin")]
-    assert labels[0] == "Личный кабинет"
-    assert labels[-1] == "Выбор роли"
-    assert "Выход из аккаунта" in labels and "Настройки" not in labels and "Кабинет" not in labels
+    labels = [b["text"] for row in menu("admin") for b in row]
+    assert labels[0] == "👤 Личный кабинет"
+    assert labels[-2:] == ["🔄 Выбор роли", "🚪 Выход из аккаунта"]
+    assert "🚪 Выход из аккаунта" in labels and "Настройки" not in labels and "Кабинет" not in labels
     _, factory, _, users = env
     with factory() as db:
         link = connect(db, users["athlete"]["id"])

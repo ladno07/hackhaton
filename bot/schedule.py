@@ -4,10 +4,10 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from app.models import (
-    Athlete, AthleteCoach, AthleteDiscipline, Coach, Competition, CompetitionApplication,
+    Athlete, AthleteCoach, Coach, Competition, CompetitionApplication,
     CompetitionJudge, Deadline, Judge, JudgeCategory, Notification, SportsRank, User, UserRole, now,
 )
-from app.services.age_groups import age_check
+from app.services.competition_notifications import admitted_athletes, competition_in_progress
 from app.services.notifications import notify
 from app.services.telegram_link import utc
 
@@ -67,14 +67,6 @@ def competition_audience(db, comp):
     return result
 
 
-def eligible(db, athlete, comp, at):
-    enrollment = db.get(AthleteDiscipline, (athlete.id, comp.discipline_id))
-    return bool(enrollment and enrollment.start_year <= comp.start_date.year
-                and (enrollment.end_year is None or enrollment.end_year >= comp.start_date.year)
-                and (athlete.suspended_until is None or athlete.suspended_until < at.date())
-                and age_check(db, comp, athlete)["eligible"])
-
-
 @dataclass
 class Reminder:
     user_id: int
@@ -83,6 +75,7 @@ class Reminder:
     body: str
     roles: set
     path: str
+    scheduled_at: datetime
 
 
 def current_reminders(db, at=None):
@@ -90,17 +83,24 @@ def current_reminders(db, at=None):
     at = utc(at or now())
     result = {}
 
-    def add(family, identity, due, stages, audience, title, body, path, zone=REGION, cutoff=None):
+    def add(family, identity, due, stages, audience, title, body, path, zone=REGION, cutoff=None, admissions=None):
         cutoff = cutoff or datetime.combine(due + timedelta(days=1), time(), zone)
         if at >= utc(cutoff):
             return
         passed = [(label, moment) for label, moment in stages if utc(moment) <= at]
         if not passed:
             return
-        label, _ = max(passed, key=lambda pair: utc(pair[1]))
+        label, moment = max(passed, key=lambda pair: utc(pair[1]))
         key = f"tg-reminder:{family}:{identity}:{label}"
         for user_id, roles in audience.items():
-            result[user_id, key] = Reminder(user_id, key, title, body, roles, path)
+            roles = roles & {"athlete"}
+            if admissions is not None and "athlete" in roles:
+                since = admissions.get(user_id)
+                if since is None or utc(moment) < utc(since):
+                    roles = roles - {"athlete"}
+            user = db.get(User, user_id)
+            if roles and user and utc(moment) >= utc(user.created_at):
+                result[user_id, key] = Reminder(user_id, key, title, body, roles, path, moment)
 
     def daily(due, offsets, zone=REGION):
         return [(str(n), datetime.combine(due - timedelta(days=n), time(9), zone)) for n in offsets]
@@ -113,43 +113,39 @@ def current_reminders(db, at=None):
             stages = [(label, moment) for label, moment in stages if moment < start]
             stages.append(("hour", start - timedelta(hours=1)))
         stamp = f"{comp.id}:{comp.start_date}:{comp.start_time}:{comp.timezone}"
+        admissions = admitted_athletes(db, comp)
         add("start", stamp, comp.start_date, stages, competition_audience(db, comp),
-            "Напоминание о соревновании", f"{comp.title}\nНачало: {comp.start_date} "
+            "Напоминание о соревновании", f"{comp.title}\nНачало: {comp.start_date:%d.%m.%Y} "
             f"{comp.start_time.strftime('%H:%M') if comp.start_time else '(время не указано)'} "
-            f"({comp.timezone})\n{comp.location}", f"/competitions/{comp.id}", zone, start)
-        if comp.state == "open" and at.astimezone(zone).date() <= comp.deadline:
-            audience = {}
-            applicants = set(db.scalars(select(CompetitionApplication.athlete_id).where(
-                CompetitionApplication.competition_id == comp.id)))
-            for athlete in db.scalars(select(Athlete)):
-                if athlete.id not in applicants and eligible(db, athlete, comp, at.astimezone(zone)):
-                    merge(audience, athlete_audience(db, athlete.id, comp.discipline_id))
-            add("registration", f"{comp.id}:{comp.deadline}", comp.deadline,
-                daily(comp.deadline, [3, 1], zone), audience, "Завершается приём заявок",
-                f"{comp.title}\nЗаявки до {comp.deadline}", f"/competitions/{comp.id}", zone)
+            f"({comp.timezone})\n{comp.location}", f"/competitions/{comp.id}", zone, start, admissions=admissions)
+        if competition_in_progress(comp, at):
+            add("end", f"{comp.id}:{comp.end_date}", comp.end_date,
+                daily(comp.end_date, [1, 0], zone), {uid: {"athlete"} for uid in admissions},
+                "Соревнование завершается", f"{comp.title}\nОкончание: {comp.end_date:%d.%m.%Y} ({comp.timezone})",
+                f"/competitions/{comp.id}", zone, admissions=admissions)
 
     admin_users = admins(db)
     for rank in db.scalars(select(SportsRank)):
         athlete = db.get(Athlete, rank.athlete_id)
-        audience = merge(athlete_audience(db, rank.athlete_id, rank.discipline_id), admin_users)
+        audience = athlete_audience(db, rank.athlete_id, rank.discipline_id)
         add("rank", f"{rank.id}:{rank.expires_on}", rank.expires_on, daily(rank.expires_on, [30, 7, 1]),
-            audience, "Истекает спортивный разряд", f"{athlete.user.full_name}: {rank.name}\nСрок: {rank.expires_on}", "/ranks")
+            audience, "Истекает спортивный разряд", f"{athlete.user.full_name}: {rank.name}\nСрок: {rank.expires_on:%d.%m.%Y}", "/ranks")
     for category in db.scalars(select(JudgeCategory)):
         judge = db.get(Judge, category.judge_id)
-        audience = {u: set(r) for u, r in admin_users.items()}
+        audience = {}
         if "judge" in roles_for(db, judge.user_id):
             audience.setdefault(judge.user_id, set()).add("judge")
         add("category", f"{category.id}:{category.expires_on}", category.expires_on,
             daily(category.expires_on, [30, 7, 1]), audience, "Истекает судейская категория",
-            f"{judge.user.full_name}: {category.name}\nСрок: {category.expires_on}", "/ranks")
+            f"{judge.user.full_name}: {category.name}\nСрок: {category.expires_on:%d.%m.%Y}", "/ranks")
     for deadline in db.scalars(select(Deadline).where(Deadline.done.is_(False))):
         add("report", f"{deadline.id}:{deadline.due_on}", deadline.due_on,
             daily(deadline.due_on, [30, 7, 1]), admin_users, "Приближается срок отчёта",
-            f"{deadline.title}: {deadline.due_on}", "/deadlines")
+            f"{deadline.title}: {deadline.due_on:%d.%m.%Y}", "/deadlines")
     today = at.astimezone(REGION).date()
     feb = date(today.year if (today.month, today.day) <= (2, 1) else today.year + 1, 2, 1)
     add("governor", str(feb.year), feb, daily(feb, [30, 7, 1]), admin_users,
-        "Ходатайства на премии Губернатора", f"Срок подачи: {feb}", "/deadlines")
+        "Ходатайства на премии Губернатора", f"Срок подачи: {feb:%d.%m.%Y}", "/deadlines")
     return result
 
 

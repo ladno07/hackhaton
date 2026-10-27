@@ -15,6 +15,14 @@ from bot.views import ROLE_NAMES, button
 
 
 def notice_roles(db, notice, reminders):
+    # Recheck legacy queued messages as well as newly scheduled reminders.
+    context_roles = (notice.telegram_context or {}).get("roles")
+    if context_roles is not None and "athlete" not in context_roles:
+        return set()
+    return _notice_roles(db, notice, reminders) & {"athlete"}
+
+
+def _notice_roles(db, notice, reminders):
     key = notice.event_key
     if key.startswith("tg-reminder:"):
         current = reminders.get((notice.user_id, key))
@@ -113,6 +121,9 @@ def deliver(db, api, at=None):
         link = db.scalar(select(TelegramLink).where(TelegramLink.id == delivery.link_id).with_for_update())
         notice = db.get(Notification, delivery.notification_id)
         roles = notice_roles(db, notice, reminders) if link and link.active else set()
+        reminder = reminders.get((notice.user_id, notice.event_key))
+        if reminder and link and utc(reminder.scheduled_at) < utc(link.connected_at):
+            roles = set()
         if not roles or not link.chat_id or link.blocked_at or notice.id <= link.baseline_id:
             delivery.status = "cancelled"
             db.commit()
