@@ -380,7 +380,7 @@ const navigation = [
     to: "/profile",
     label: "Мой профиль",
     icon: ShieldCheck,
-    roles: ["athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
 ];
 function Layout() {
@@ -521,7 +521,7 @@ function Layout() {
               <Bell size={20} />
               {unread > 0 && <i>{unread > 9 ? "9+" : unread}</i>}
             </Link>
-            <div className="topbar-user">
+            <Link to="/profile" className="topbar-user" aria-label="Открыть мой профиль" title="Мой профиль">
               <span className="avatar">
                 {auth.user.full_name.replace("Демо · ", "").slice(0, 1)}
               </span>
@@ -529,7 +529,7 @@ function Layout() {
                 <strong>{auth.user.full_name.replace("Демо · ", "")}</strong>
                 <small>{roleNames[auth.role]}</small>
               </div>
-            </div>
+            </Link>
             <button
               onClick={auth.logout}
               className="icon-btn"
@@ -669,7 +669,7 @@ export default function App() {
         <Route
           path="profile"
           element={
-            <Guard roles={["athlete", "coach", "judge"]}>
+            <Guard roles={["admin", "athlete", "coach", "judge", "ministry"]}>
               <Profile />
             </Guard>
           }
