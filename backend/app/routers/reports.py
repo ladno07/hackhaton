@@ -11,6 +11,7 @@ from app.config import settings
 from app.services.documents import OfficialDocument, export_document, MIME
 from app.services.reports import population
 from app.services.protocols import versions
+from app.services.appeals import DECISION_DAYS
 
 router = APIRouter(tags=["Документы и аналитика"])
 HEAD = (settings.fsp_head_position, settings.fsp_head_name)
@@ -161,6 +162,17 @@ def attention(
             "подана",
             "/ranks",
         )
+    for a in db.scalars(select(Appeal).where(Appeal.status == "pending")):
+        add(
+            "appeals",
+            a.id,
+            db.get(Athlete, a.athlete_id).user.full_name,
+            f"Апелляция № А-{a.id} на "
+            + ("протокол" if a.subject == "result" else "решение о нарушении"),
+            a.created_at.date() + timedelta(days=DECISION_DAYS),
+            "решение до",
+            "/appeals",
+        )
     for r in db.scalars(
         select(SportsRank).where(
             SportsRank.expires_on >= today, SportsRank.expires_on <= until
@@ -208,7 +220,7 @@ def attention(
         )
 
     items.sort(key=lambda x: x["due_on"])
-    kinds = ("applications", "rank_applications", "ranks", "categories", "reports")
+    kinds = ("applications", "rank_applications", "appeals", "ranks", "categories", "reports")
     return {
         "window_days": ATTENTION_DAYS,
         "counts": {k: sum(i["kind"] == k for i in items) for k in kinds},
@@ -491,6 +503,17 @@ def chief_report(
     corrections = [
         f"Редакция {v.version} от {v.created_at:%d.%m.%Y}: {v.reason}" for v in history[1:]
     ]
+    appeals = [
+        f"№ А-{a.id} от {a.created_at:%d.%m.%Y}, {db.get(Athlete, a.athlete_id).user.full_name}: "
+        + {"pending": "на рассмотрении", "upheld": "удовлетворена",
+           "rejected": "отклонена", "withdrawn": "отозвана"}[a.status]
+        + (f". {a.decision}" if a.decision else "")
+        for a in db.scalars(
+            select(Appeal)
+            .where(Appeal.competition_id == comp.id, Appeal.subject == "result")
+            .order_by(Appeal.id)
+        )
+    ]
     return download(
         OfficialDocument(
             kind="Отчёт",
@@ -525,6 +548,7 @@ def chief_report(
                 if corrections
                 else ["Исправлений протокола после публикации не было."]
             )
+            + (["Апелляции на протокол:", *appeals] if appeals else ["Апелляций на протокол не поступало."])
             + ["Замечания и предложения главного судьи: ________________________________"],
             signatures=[
                 (CHIEF, by_position(CHIEF)),

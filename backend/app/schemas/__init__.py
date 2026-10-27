@@ -403,6 +403,49 @@ class AwardRuleIn(Strict):
     third: int = Field(ge=0, le=10_000_000)
 
 
+class ViolationIn(Strict):
+    athlete_id: int
+    competition_id: int | None = None
+    kind: Literal["rules", "conduct", "doping", "other"]
+    occurred_on: date
+    description: str = Field(min_length=5, max_length=2000)
+    sanction: Literal["warning", "suspension"]
+    suspended_until: date | None = None
+
+    @model_validator(mode="after")
+    def sanction_dates(self):
+        if self.occurred_on > date.today():
+            raise ValueError("Дата нарушения не может быть в будущем")
+        if (self.sanction == "suspension") != (self.suspended_until is not None):
+            raise ValueError("Срок отстранения указывается только для отстранения")
+        if self.suspended_until and self.suspended_until < date.today():
+            raise ValueError("Срок отстранения уже истёк")
+        return self
+
+
+class AppealIn(Strict):
+    subject: Literal["result", "violation"]
+    result_id: int | None = None
+    violation_id: int | None = None
+    reason: str = Field(min_length=10, max_length=4000)
+    request: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def one_subject(self):
+        if (self.result_id is None) != (self.subject == "violation") or (
+            self.violation_id is None
+        ) != (self.subject == "result"):
+            raise ValueError("Укажите строку протокола или нарушение")
+        return self
+
+
+class AppealDecisionIn(Strict):
+    status: Literal["upheld", "rejected"]
+    decision: str = Field(min_length=5, max_length=4000)
+    # corrected protocol for an upheld result appeal; omit to keep the protocol
+    correction: ResultsIn | None = None
+
+
 class AwardStatusIn(Strict):
     status: Literal["candidate", "nominated", "awarded", "rejected"]
     comment: str = Field("", max_length=2000)

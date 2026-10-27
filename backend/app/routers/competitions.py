@@ -581,6 +581,11 @@ def correct(
     comp = locked(db, comp_id)
     if comp.state != "published":
         raise HTTPException(409, "Исправить можно только опубликованный протокол")
+    return apply_correction(db, actor, comp, data, data.reason)
+
+
+def apply_correction(db, actor, comp, data, reason):
+    """New protocol version with changed places/scores; the roster is kept."""
     current = {r.athlete_id: r for r in current_results(db, comp.id)}
     entries = expand_results(db, comp, data)
     check_entries(entries, current)
@@ -596,7 +601,7 @@ def correct(
     for r in changed:
         for k in fields:
             setattr(current[r.athlete_id], k, getattr(r, k))
-    version = add_version(db, comp, actor.user.id, data.reason)
+    version = add_version(db, comp, actor.user.id, reason)
     warnings = rank_warnings(db, [current[r.athlete_id].id for r in changed])
     audit(
         db,
@@ -605,7 +610,7 @@ def correct(
         comp,
         {
             "version": version.version,
-            "reason": data.reason,
+            "reason": reason,
             "changed": len(changed),
             "rank_warnings": warnings,
         },
@@ -616,7 +621,7 @@ def correct(
             db,
             athlete_audience(db, athlete_id, comp.discipline_id),
             "Протокол исправлен",
-            f"{comp.title}: редакция {version.version}. {data.reason}",
+            f"{comp.title}: редакция {version.version}. {reason}",
             f"protocol:{comp.id}:{athlete_id}:v{version.version}",
         )
     return {

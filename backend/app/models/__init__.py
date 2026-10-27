@@ -707,3 +707,73 @@ class GovernorAward(Base):
     order_number: Mapped[str | None] = mapped_column(String(120))
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Violation(Base):
+    """Violation recorded by the federation. A suspension sanction moves
+    athletes.suspended_until; cancelling it restores the remaining one."""
+
+    __tablename__ = "violations"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('rules','conduct','doping','other')", name="ck_violation_kind"
+        ),
+        CheckConstraint(
+            "(sanction = 'warning' AND suspended_until IS NULL) OR "
+            "(sanction = 'suspension' AND suspended_until IS NOT NULL)",
+            name="ck_violation_sanction",
+        ),
+        CheckConstraint(
+            "status IN ('active','cancelled')", name="ck_violation_status"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    competition_id: Mapped[int | None] = mapped_column(ForeignKey("competitions.id"))
+    kind: Mapped[str] = mapped_column(String(20))
+    occurred_on: Mapped[date] = mapped_column(Date)
+    description: Mapped[str] = mapped_column(Text)
+    sanction: Mapped[str] = mapped_column(String(20))
+    suspended_until: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Appeal(Base):
+    """Appeal against a protocol line or a violation. An upheld result appeal
+    may produce a protocol version; an upheld violation appeal cancels it."""
+
+    __tablename__ = "appeals"
+    __table_args__ = (
+        CheckConstraint(
+            "(subject = 'result' AND result_id IS NOT NULL AND violation_id IS NULL) OR "
+            "(subject = 'violation' AND violation_id IS NOT NULL AND result_id IS NULL)",
+            name="ck_appeal_subject",
+        ),
+        CheckConstraint(
+            "status IN ('pending','upheld','rejected','withdrawn')",
+            name="ck_appeal_status",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    subject: Mapped[str] = mapped_column(String(20))
+    competition_id: Mapped[int | None] = mapped_column(ForeignKey("competitions.id"))
+    result_id: Mapped[int | None] = mapped_column(ForeignKey("competition_results.id"))
+    # protocol version the applicant saw when appealing
+    protocol_version: Mapped[int | None] = mapped_column(Integer)
+    violation_id: Mapped[int | None] = mapped_column(ForeignKey("violations.id"))
+    reason: Mapped[str] = mapped_column(Text)
+    request: Mapped[str] = mapped_column(Text, default="")
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    submitted_role: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    decision: Mapped[str] = mapped_column(Text, default="")
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # protocol version created by the decision
+    resolution_version: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
