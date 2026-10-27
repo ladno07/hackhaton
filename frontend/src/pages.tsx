@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { CoachChat } from "./coach-chat";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -383,6 +384,11 @@ export function Overview() {
             <h2>Следующий шаг в вашем сезоне</h2>
             <p>Проверьте профиль, результаты и сроки действия квалификации.</p>
           </div>
+          {role === "athlete" && (
+            <Link className="btn btn-outline" to="/coaching">
+              Чаты с тренерами <ArrowRight size={16} />
+            </Link>
+          )}
           <Link
             className="btn btn-outline"
             to={
@@ -874,6 +880,8 @@ function AthleteProfile({ user }: any) {
 
 export function Coaching() {
   const { role } = useAuth();
+  const [search, setSearch] = useSearchParams();
+  const chatId = Number(search.get("chat"));
   const q = useData("/links");
   const athletes = useData("/athletes", role === "coach");
   const meta = useData("/metadata");
@@ -885,7 +893,9 @@ export function Coaching() {
     <>
       <PageTitle
         title={role === "coach" ? "Мои спортсмены" : "Связи с тренерами"}
-        description="Привязка действует только после подтверждения спортсменом. История изменений сохраняется."
+        description={role === "athlete"
+          ? "Подтвердите заявку тренера — первым действием в строке появится чат с ним."
+          : "Привязка действует только после подтверждения спортсменом. История изменений сохраняется."}
       >
         {role === "coach" && (
           <Button onClick={() => setShow(true)}>
@@ -934,6 +944,11 @@ export function Coaching() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      {["athlete", "coach"].includes(role) && l.status === "active" && (
+                        <Button size="sm" variant="outline" onClick={() => setSearch({ chat: String(l.id) })}>
+                          Чат
+                        </Button>
+                      )}
                       {["coach", "admin"].includes(role) &&
                         l.status === "active" && (
                           <Button size="sm" variant="outline" asChild>
@@ -958,7 +973,7 @@ export function Coaching() {
                                 method: "patch",
                                 url: "/links/" + l.id,
                                 data: { status: "active" },
-                              })
+                              }, { onSuccess: () => setSearch({ chat: String(l.id) }) })
                             }
                           >
                             Подтвердить
@@ -1001,12 +1016,15 @@ export function Coaching() {
             </Table>
           ) : (
             <Empty
-              text="Связей со спортсменами пока нет"
+              text={role === "athlete" ? "Связей с тренерами пока нет" : "Связей со спортсменами пока нет"}
               hint="Тренер отправляет запрос; спортсмен подтверждает его в своём кабинете."
             />
           )}
         </State>
       </section>
+      {chatId > 0 && ["athlete", "coach"].includes(role) && (
+        <CoachChat key={`${role}-${chatId}`} linkId={chatId} onClose={() => setSearch({})} />
+      )}
       <Dialog open={show} onOpenChange={setShow} title="Запрос на привязку">
         <form
           onSubmit={async (e) => {

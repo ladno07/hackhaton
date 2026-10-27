@@ -167,6 +167,16 @@ class AthleteCoach(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class CoachChatMessage(Base):
+    __tablename__ = "coach_chat_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    link_id: Mapped[int] = mapped_column(ForeignKey("athlete_coaches.id"), index=True)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    sender_role: Mapped[str] = mapped_column(String(20))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class LinkHistory(Base):
     __tablename__ = "link_history"
     id: Mapped[int] = mapped_column(primary_key=True)
