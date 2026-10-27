@@ -13,6 +13,7 @@ from app.services.notifications import notify
 from app.config import settings
 from app.services.documents import OfficialDocument, export_document
 from app.services.protocols import add_version
+from app.services.awards import DEFAULT_AMOUNTS, achievements
 
 DISCIPLINES = [
     ("Программирование алгоритмическое", "Алгоритмы"),
@@ -129,6 +130,23 @@ def indicators_demo(db, admin, year):
     )
 
 
+def awards_demo(db, admin, year):
+    """The winner of the demo interregional cup is already in the petition."""
+    found = achievements(db, year)
+    athlete_id, items = min(found.items(), key=lambda x: x[1][0]["place"])
+    db.add(
+        GovernorAward(
+            year=year,
+            athlete_id=athlete_id,
+            status="nominated",
+            amount=items[0]["amount"],
+            basis=items[0],
+            comment="Демо: решение совета федерации",
+            updated_by=admin.id,
+        )
+    )
+
+
 def seed(demo=False):
     with SessionLocal() as db:
         for k, v in ROLES:
@@ -173,6 +191,13 @@ def seed(demo=False):
             if not db.get(RatingRule, level):
                 db.add(
                     RatingRule(
+                        level=level, first=values[0], second=values[1], third=values[2]
+                    )
+                )
+        for level, values in DEFAULT_AMOUNTS:
+            if not db.get(GovernorAwardRule, level):
+                db.add(
+                    GovernorAwardRule(
                         level=level, first=values[0], second=values[1], third=values[2]
                     )
                 )
@@ -493,6 +518,7 @@ def seed(demo=False):
             )
         )
         indicators_demo(db, admin, year - 1)
+        awards_demo(db, admin, (today - timedelta(days=30)).year)
         ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(

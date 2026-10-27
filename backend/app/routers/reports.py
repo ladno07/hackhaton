@@ -204,7 +204,7 @@ def attention(
             "Срок подачи",
             governor,
             "срок",
-            "/ratings",
+            "/awards",
         )
 
     items.sort(key=lambda x: x["due_on"])

@@ -608,3 +608,39 @@ class IndicatorDocument(Base):
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now
     )
+
+
+class GovernorAwardRule(Base):
+    """Prize amount in rubles for a place at a competition of the rating level;
+    0 means the place does not make an athlete a candidate."""
+
+    __tablename__ = "governor_award_rules"
+    level: Mapped[str] = mapped_column(String(40), primary_key=True)
+    first: Mapped[int] = mapped_column(Integer)
+    second: Mapped[int] = mapped_column(Integer)
+    third: Mapped[int] = mapped_column(Integer)
+
+
+class GovernorAward(Base):
+    """Decision on a candidate for the year's achievements. A candidate without
+    a record has not been put forward yet; amount and basis are fixed when the
+    federation includes the athlete in the petition."""
+
+    __tablename__ = "governor_awards"
+    __table_args__ = (
+        UniqueConstraint("year", "athlete_id"),
+        CheckConstraint(
+            "status IN ('nominated','awarded','rejected')",
+            name="ck_governor_award_status",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    status: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[int] = mapped_column(Integer)
+    basis: Mapped[dict] = mapped_column(JSON)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    order_number: Mapped[str | None] = mapped_column(String(120))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

@@ -1732,6 +1732,43 @@ td a:hover {
   margin: 0;
   max-width: 90px;
 }
+.award-rule {
+  flex-wrap: wrap;
+}
+/* amounts in rubles need wider inputs than rating points */
+.rule-editor.award-rule .field {
+  flex: 0 0 120px;
+  max-width: none;
+}
+.award-amount {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.award-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.award-more {
+  color: var(--fsp-primary-400);
+}
+.award-warning {
+  color: var(--fsp-danger-700);
+}
+.award-dialog-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .award-actions {
+    justify-content: flex-start;
+  }
+}
 .settings-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;

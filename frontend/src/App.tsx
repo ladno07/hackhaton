@@ -31,6 +31,7 @@ import {
   ClipboardList,
   BookOpen,
   Route as RouteIcon,
+  Award,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames } from "./lib";
@@ -48,6 +49,7 @@ import {
 } from "./pages";
 import { Competitions, CompetitionDetail } from "./competitions";
 import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
+import { GovernorAwards } from "./awards";
 
 import {
   AthleteProfileView,
@@ -355,6 +357,12 @@ const navigation = [
     roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
+    to: "/awards",
+    label: "Премии Губернатора",
+    icon: Award,
+    roles: ["admin", "ministry"],
+  },
+  {
     to: "/reports",
     label: "Аналитика и отчёты",
     icon: FileText,
@@ -626,6 +634,14 @@ export default function App() {
         <Route path="help" element={<Help />} />
         <Route path="ranks" element={<Ranks />} />
         <Route path="ratings" element={<Ratings />} />
+        <Route
+          path="awards"
+          element={
+            <Guard roles={["admin", "ministry"]}>
+              <GovernorAwards />
+            </Guard>
+          }
+        />
         <Route
           path="reports"
           element={

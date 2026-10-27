@@ -50,6 +50,7 @@
 | GET/PUT `/team` | Состав / ручное сохранение федерацией |
 | GET `/reports/population` | Федерация: разрезы численности за 2+ года; организация по истории переходов |
 | GET/POST/PUT/DELETE `/indicators`, `/indicators/{id}/documents`, `/indicator-documents/{id}`, `/exports/indicators.{fmt}` | Показатели развития: из реестра (с описанием источника) и внесённые федерацией с источником и документами; Минспорт только читает |
+| GET `/governor-awards?year=`, PUT `/governor-awards/{year}/{athlete_id}`, GET/PUT `/governor-award-rules[/{level}]`, GET `/exports/governor-awards.{fmt}` | Премии Губернатора: претенденты из опубликованных протоколов по справочнику сумм, статусы ходатайства; изменения только федерацией, Минспорт читает |
 | GET `/exports/protocol/{id}.{fmt}?version=N` | Опубликованный протокол; по умолчанию последняя редакция |
 | GET `/exports/athlete/{id}.{fmt}` | Отчёт доступного спортсмена |
 | GET `/exports/population.{fmt}`, `/exports/team.{fmt}` | Федерация; team с `order=true` — проект приказа |
