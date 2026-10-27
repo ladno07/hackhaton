@@ -58,12 +58,14 @@ def env(monkeypatch):
     with TestClient(app) as client:
 
         def login(email, role):
+            client.cookies.clear()
             res = client.post(
                 "/api/auth/login",
                 json={"email": email + "@demo.example", "password": "DemoPass2026!"},
             )
             assert res.status_code == 200, res.text
             data = res.json()
+            client.cookies.clear()
             return {
                 "Authorization": "Bearer " + data["access_token"],
                 "X-Active-Role": role,

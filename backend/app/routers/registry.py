@@ -15,9 +15,24 @@ from app.schemas import (
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify
+from app.services.path import personal_path
 from app.services.ratings import rating_levels
+from app.services.athlete_ids import public_athlete_id
 
 router = APIRouter(tags=["Реестры и профили"])
+MINISTRY_FIELDS = [
+    "id",
+    "full_name",
+    "sex",
+    "age",
+    "municipality",
+    "organization",
+    "organization_id",
+    "training_stage",
+    "suspended_until",
+    "disciplines",
+    "ranks",
+]
 
 
 def athlete_view(db, athlete):
@@ -33,6 +48,7 @@ def athlete_view(db, athlete):
     )
     return {
         **row(athlete),
+        "public_id": public_athlete_id(athlete.id),
         "full_name": athlete.user.full_name,
         "sex": athlete.user.sex,
         "age": age_at(athlete.user.birth_date),
@@ -46,6 +62,10 @@ def athlete_view(db, athlete):
             )
         ],
         "ranks": [row(r) for r in ranks],
+        "organization_history": [
+            {**row(p), "organization": db.get(Organization, p.organization_id).name}
+            for p in memberships(db, athlete.id)
+        ],
     }
 
 
@@ -77,7 +97,7 @@ def athletes(
     max_age: int = 100,
     rank: str = "",
     mine: bool = False,
-    actor: Actor = Depends(allow("admin", "coach", "athlete")),
+    actor: Actor = Depends(allow("admin", "coach", "athlete", "ministry")),
     db: Session = Depends(get_db),
 ):
     ids = visible_athletes(db, actor) if mine or actor.role == "athlete" else None
@@ -111,6 +131,7 @@ def athletes(
                 k: item[k]
                 for k in [
                     "id",
+                    "public_id",
                     "full_name",
                     "municipality",
                     "organization",
@@ -119,6 +140,9 @@ def athletes(
                     "age",
                 ]
             }
+        # The ministry sees the registry for statistics: no documents or reasons.
+        if actor.role == "ministry":
+            item = {k: item[k] for k in MINISTRY_FIELDS}
         output.append(item)
     return output
 
@@ -129,7 +153,17 @@ def athlete_detail(
     actor: Actor = Depends(current_actor),
     db: Session = Depends(get_db),
 ):
-    return athlete_view(db, can_athlete(db, actor, athlete_id))
+    athlete = can_athlete(db, actor, athlete_id)
+    return {**athlete_view(db, athlete), "birth_date": athlete.user.birth_date}
+
+
+@router.get("/athletes/{athlete_id}/path")
+def athlete_path(
+    athlete_id: int,
+    actor: Actor = Depends(allow("athlete", "coach", "admin")),
+    db: Session = Depends(get_db),
+):
+    return personal_path(db, can_athlete(db, actor, athlete_id))
 
 
 @router.put("/athletes/{athlete_id}")
@@ -150,8 +184,17 @@ def update_profile(
     athlete.user.full_name = data.full_name
     if "sex" in data.model_fields_set:
         athlete.user.sex = data.sex
+    transfer(db, athlete, data.organization_id, data.organization_since)
     for key, value in data.model_dump(
-        mode="json", exclude={"full_name", "sex", "disciplines", "rusada_date"}
+        mode="json",
+        exclude={
+            "full_name",
+            "sex",
+            "disciplines",
+            "rusada_date",
+            "organization_id",
+            "organization_since",
+        },
     ).items():
         setattr(athlete, key, value)
     athlete.rusada_date = data.rusada_date
@@ -222,6 +265,7 @@ def links(
         {
             **row(x),
             "athlete": db.get(Athlete, x.athlete_id).user.full_name,
+            "athlete_public_id": public_athlete_id(x.athlete_id),
             "coach": db.get(Coach, x.coach_id).user.full_name,
             "history": [
                 row(h)

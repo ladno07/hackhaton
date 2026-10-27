@@ -7,7 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.db import engine
-from app.routers import auth, registry, staff, competitions, federation, reports, telegram
+from app.routers import auth, registry, staff, competitions, federation, reports, public, telegram
+from app.routers import awards, competition_teams, documents, indicators, passports
 from app.services.notifications import worker
 
 
@@ -29,6 +30,25 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Active-Role"],
 )
+
+
+@app.middleware("http")
+async def public_privacy_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(
+        (
+            "/api/public/",
+            "/api/auth/",
+            "/api/my/profile-visibility",
+            "/api/my/documents",
+            "/api/athlete-profiles/",
+            "/api/results",
+        )
+    ):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.exception_handler(IntegrityError)
@@ -54,7 +74,13 @@ for router in [
     registry.router,
     staff.router,
     competitions.router,
+    competition_teams.router,
+    passports.router,
+    documents.router,
     federation.router,
     reports.router,
+    indicators.router,
+    awards.router,
+    public.router,
 ]:
     app.include_router(router, prefix="/api")

@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import PurePath
+from typing import Literal
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import delete, func, select
@@ -23,6 +24,7 @@ from app.services.common import *
 from app.services.notifications import notify, admins, athlete_audience
 from app.services.competition_notifications import registration_recipients
 from app.services.ratings import recalculate, rating_level
+from app.services.competition_teams import expand_results
 from app.services.protocols import (
     add_version,
     check_entries,
@@ -71,9 +73,7 @@ def set_groups(db, comp, data):
     if any(g.discipline_id not in (None, comp.discipline_id) for g in groups):
         raise HTTPException(422, "Возрастная группа относится к другой дисциплине")
     db.execute(
-        delete(CompetitionAgeGroup).where(
-            CompetitionAgeGroup.competition_id == comp.id
-        )
+        delete(CompetitionAgeGroup).where(CompetitionAgeGroup.competition_id == comp.id)
     )
     db.add_all(
         [CompetitionAgeGroup(competition_id=comp.id, age_group_id=g.id) for g in groups]
@@ -409,6 +409,8 @@ def apply(
     db: Session = Depends(get_db),
 ):
     comp = locked(db, comp_id)
+    if comp.entry_mode == "team":
+        raise HTTPException(409, "Подайте общую заявку через вкладку «Команды»")
     athlete = can_athlete(db, actor, data.athlete_id, comp.discipline_id)
     if comp.state != "open" or comp.deadline < date.today():
         raise HTTPException(409, "Приём заявок закрыт")
@@ -465,6 +467,10 @@ def moderate(
 ):
     obj = require(db, CompetitionApplication, application_id)
     comp = locked(db, obj.competition_id)
+    if comp.entry_mode == "team":
+        raise HTTPException(
+            409, "Рассматривайте командную заявку целиком во вкладке «Команды»"
+        )
     if comp.state == "published" or obj.status != "pending":
         raise HTTPException(409, "Заявка уже рассмотрена или протокол опубликован")
     obj.status, obj.comment = data.status, data.comment
@@ -539,12 +545,10 @@ def publish(
             )
         ).all()
     )
-    check_entries(data.results, approved)
+    entries = expand_results(db, comp, data)
+    check_entries(entries, approved)
     db.add_all(
-        [
-            CompetitionResult(competition_id=comp.id, **r.model_dump())
-            for r in data.results
-        ]
+        [CompetitionResult(competition_id=comp.id, **r.model_dump()) for r in entries]
     )
     comp.state = "published"
     add_version(db, comp, actor.user.id)
@@ -553,7 +557,7 @@ def publish(
         actor,
         "Публикация результатов и протокола",
         comp,
-        {"participants": len(data.results)},
+        {"participants": len(entries)},
     )
     recalculate(db, comp.start_date.year)
     for athlete_id in approved:
@@ -564,7 +568,7 @@ def publish(
             comp.title,
             f"protocol:{comp.id}:{athlete_id}",
         )
-    return {"state": comp.state, "count": len(data.results), "version": 1}
+    return {"state": comp.state, "count": len(entries), "version": 1}
 
 
 @router.put("/competitions/{comp_id}/results")
@@ -578,11 +582,12 @@ def correct(
     if comp.state != "published":
         raise HTTPException(409, "Исправить можно только опубликованный протокол")
     current = {r.athlete_id: r for r in current_results(db, comp.id)}
-    check_entries(data.results, current)
+    entries = expand_results(db, comp, data)
+    check_entries(entries, current)
     fields = ("place", "score", "team_name")
     changed = [
         r
-        for r in data.results
+        for r in entries
         if any(getattr(current[r.athlete_id], k) != getattr(r, k) for k in fields)
     ]
     if not changed:
@@ -644,6 +649,21 @@ def history(
     return [
         {
             **row(r),
+            "can_download_certificate": actor.role in {"admin", "athlete"}
+            or (
+                actor.role == "coach"
+                and db.scalar(
+                    select(AthleteCoach.id)
+                    .join(Coach, Coach.id == AthleteCoach.coach_id)
+                    .where(
+                        Coach.user_id == actor.user.id,
+                        AthleteCoach.athlete_id == r.athlete_id,
+                        AthleteCoach.discipline_id == c.discipline_id,
+                        AthleteCoach.status == "active",
+                    )
+                )
+                is not None
+            ),
             "full_name": db.get(Athlete, r.athlete_id).user.full_name,
             "title": c.title,
             "start_date": c.start_date,
@@ -664,16 +684,37 @@ def history(
 
 @router.get("/assignments")
 def assignments(
-    actor: Actor = Depends(allow("admin", "judge")), db: Session = Depends(get_db)
+    scope: Literal["upcoming", "past"] | None = None,
+    actor: Actor = Depends(allow("admin", "judge")),
+    db: Session = Depends(get_db),
 ):
-    query = select(CompetitionJudge, Competition).join(
-        Competition, Competition.id == CompetitionJudge.competition_id
+    """upcoming: the competition has not ended yet; past: it ended before today."""
+    query = (
+        select(CompetitionJudge, Competition, Discipline)
+        .join(Competition, Competition.id == CompetitionJudge.competition_id)
+        .join(Discipline, Discipline.id == Competition.discipline_id)
     )
     if actor.role == "judge":
         query = query.where(CompetitionJudge.judge_id == own(db, Judge, actor).id)
+    if scope == "upcoming":
+        query = query.where(Competition.end_date >= date.today()).order_by(
+            Competition.start_date, Competition.id
+        )
+    elif scope == "past":
+        query = query.where(Competition.end_date < date.today()).order_by(
+            Competition.start_date.desc(), Competition.id.desc()
+        )
     return [
-        {**row(j), "title": c.title, "start_date": c.start_date, "state": c.state}
-        for j, c in db.execute(query)
+        {
+            **row(j),
+            "title": c.title,
+            "start_date": c.start_date,
+            "end_date": c.end_date,
+            "location": c.location,
+            "discipline": d.short_name,
+            "state": c.state,
+        }
+        for j, c, d in db.execute(query)
     ]
 
 

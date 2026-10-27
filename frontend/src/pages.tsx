@@ -24,8 +24,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useAction, useAuth, useData } from "./state";
-import { date, formats, roleNames, sexNames, today } from "./lib";
+import { useAction, useAuth, useData, useToast } from "./state";
+import { chartColors, date, download, formats, roleNames, sexNames, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
@@ -41,17 +41,100 @@ import {
   State,
   Table,
 } from "./components/shared";
+import { PassportPanel } from "./passport-panel";
+import { auditDetails, auditEntity } from "./audit-details";
+import { ProfileDocuments, ProfileSportsSummary } from "./profile-documents";
+const attentionGroups: [string, string, string][] = [
+  ["applications", "Заявки на соревнования", "/competitions"],
+  ["rank_applications", "Заявки на разряды и категории", "/ranks"],
+  ["ranks", "Истекающие разряды", "/registry"],
+  ["categories", "Истекающие судейские категории", "/registry"],
+  ["reports", "Сроки отчётов", "/settings"],
+];
+
+function AttentionPanel() {
+  const attention = useData("/dashboard/attention");
+  const items: any[] = attention.data?.items || [];
+  const soon = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  return (
+    <section className="panel attention-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>
+            <Clock3 size={18} /> Требует внимания
+          </h2>
+          <p>
+            Решения федерации и сроки · истечение в ближайшие{" "}
+            {attention.data?.window_days || 30} дней
+          </p>
+        </div>
+        <span className="count-label">{items.length}</span>
+      </div>
+      <State query={attention}>
+        {items.length ? (
+          attentionGroups.map(([kind, label, link]) => {
+            const group = items.filter((i) => i.kind === kind);
+            return (
+              <div className="attention-group" key={kind}>
+                <div className="attention-group-title">
+                  <span>{label}</span>
+                  <b>{group.length}</b>
+                </div>
+                {group.slice(0, 3).map((i) => (
+                  <Link
+                    className="deadline-row"
+                    key={kind + ":" + i.id}
+                    to={i.link}
+                  >
+                    <span
+                      className={
+                        "deadline-dot " +
+                        (i.overdue || (kind !== "rank_applications" && i.due_on <= soon)
+                          ? "urgent"
+                          : "")
+                      }
+                    />
+                    <div>
+                      <h3>
+                        {i.title.replace("Демо · ", "")} · {i.detail}
+                      </h3>
+                      <p>
+                        {i.overdue ? "просрочено · " : i.date_label + " "}
+                        {date(i.due_on)}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+                {group.length > 3 && (
+                  <Link className="attention-more" to={link}>
+                    Ещё {group.length - 3} <ArrowRight size={13} />
+                  </Link>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <Empty
+            text="Всё под контролем"
+            hint="Нет заявок на рассмотрении и ближайших сроков."
+          />
+        )}
+      </State>
+    </section>
+  );
+}
+
 export function Overview() {
   const { user, role } = useAuth();
   const stats = useData("/dashboard");
   const comps = useData("/competitions");
-  const deadlines = useData("/deadlines");
+  const deadlines = useData("/deadlines", role !== "admin");
   const pop = useData(
     "/reports/population?start_year=" +
       (new Date().getFullYear() - 3) +
       "&end_year=" +
       new Date().getFullYear(),
-    role === "admin",
+    role === "admin" || role === "ministry",
   );
   const upcoming = (comps.data || [])
     .filter((c: any) => c.start_date >= today() && c.state !== "published")
@@ -113,13 +196,13 @@ export function Overview() {
                 : role === "athlete"
                   ? "Мой профиль"
                   : role === "judge"
-                    ? "Мои назначения"
+                    ? "Назначения"
                     : "Спортсмены"
             }
             value={role === "judge" ? s?.assignments : s?.athletes}
             icon={Users}
             note={
-              role === "admin"
+              role === "admin" || role === "ministry"
                 ? "в едином реестре"
                 : "в пределах вашего кабинета"
             }
@@ -183,39 +266,43 @@ export function Overview() {
             )}
           </State>
         </section>
-        <section className="panel attention-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>
-                <Clock3 size={18} /> Не пропустите
-              </h2>
-              <p>Сроки в вашем кабинете</p>
+        {role === "admin" ? (
+          <AttentionPanel />
+        ) : (
+          <section className="panel attention-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>
+                  <Clock3 size={18} /> Не пропустите
+                </h2>
+                <p>Сроки в вашем кабинете</p>
+              </div>
+              <span className="count-label">{deadlines.data?.length || 0}</span>
             </div>
-            <span className="count-label">{deadlines.data?.length || 0}</span>
-          </div>
-          <State query={deadlines}>
-            {deadlines.data?.length ? (
-              deadlines.data.slice(0, 4).map((d: any, i: number) => (
-                <div className="deadline-row" key={d.kind + ":" + d.id}>
-                  <span
-                    className={"deadline-dot " + (i === 0 ? "urgent" : "")}
-                  />
-                  <div>
-                    <h3>{d.title.replace("Демо · ", "")}</h3>
-                    <p>{date(d.due_on)}</p>
+            <State query={deadlines}>
+              {deadlines.data?.length ? (
+                deadlines.data.slice(0, 4).map((d: any, i: number) => (
+                  <div className="deadline-row" key={d.kind + ":" + d.id}>
+                    <span
+                      className={"deadline-dot " + (i === 0 ? "urgent" : "")}
+                    />
+                    <div>
+                      <h3>{d.title.replace("Демо · ", "")}</h3>
+                      <p>{date(d.due_on)}</p>
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <Empty
-                text="Нет ближайших сроков"
-                hint="Уведомим, когда появится важное событие."
-              />
-            )}
-          </State>
-        </section>
+                ))
+              ) : (
+                <Empty
+                  text="Нет ближайших сроков"
+                  hint="Уведомим, когда появится важное событие."
+                />
+              )}
+            </State>
+          </section>
+        )}
       </div>
-      {role === "admin" ? (
+      {role === "admin" || role === "ministry" ? (
         <section className="panel growth-panel">
           <div className="panel-heading">
             <div>
@@ -245,15 +332,21 @@ export function Overview() {
                     margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
                   >
                     <defs>
-                      <linearGradient id="redArea" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient
+                        id="primaryArea"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
                         <stop
                           offset="0%"
-                          stopColor="#bd2d3c"
+                          stopColor={chartColors.primary}
                           stopOpacity={0.2}
                         />
                         <stop
                           offset="100%"
-                          stopColor="#bd2d3c"
+                          stopColor={chartColors.primary}
                           stopOpacity={0}
                         />
                       </linearGradient>
@@ -261,7 +354,7 @@ export function Overview() {
                     <CartesianGrid
                       strokeDasharray="4 5"
                       vertical={false}
-                      stroke="#e9ebef"
+                      stroke={chartColors.grid}
                     />
                     <XAxis dataKey="year" tickLine={false} axisLine={false} />
                     <YAxis
@@ -273,9 +366,9 @@ export function Overview() {
                     <Area
                       dataKey="count"
                       name="Спортсменов"
-                      stroke="#bb2e40"
+                      stroke={chartColors.primary}
                       strokeWidth={3}
-                      fill="url(#redArea)"
+                      fill="url(#primaryArea)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -309,8 +402,12 @@ export function Overview() {
 }
 
 export function History() {
+  const { role } = useAuth();
+  // Минспорт видит протоколы, но не персональные отчёты каждого спортсмена
+  const personal = role !== "ministry";
   const q = useData("/results");
-  const a = useData("/athletes?mine=true");
+  const toast = useToast();
+  const a = useData("/athletes?mine=true", personal);
   const [search, setSearch] = useState("");
   return (
     <>
@@ -331,6 +428,7 @@ export function History() {
                 "Место",
                 "Баллы",
                 "Протокол",
+                ...(personal ? ["Справка об участии"] : []),
               ]}
             >
               {q.data
@@ -342,7 +440,12 @@ export function History() {
                 .map((r: any) => (
                   <tr key={r.id}>
                     <td>
-                      <strong>{r.full_name}</strong>
+                      <Link
+                        className="text-link"
+                        to={`/athletes/${r.athlete_id}/profile`}
+                      >
+                        <strong>{r.full_name}</strong>
+                      </Link>
                       <small>{r.title}</small>
                     </td>
                     <td>{date(r.start_date)}</td>
@@ -358,6 +461,38 @@ export function History() {
                         name={"protocol-" + r.competition_id}
                       />
                     </td>
+                    {personal && (
+                    <td>
+                      {r.can_download_certificate ? (
+                        <div className="row-actions">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              download(
+                                `/results/${r.id}/certificate.pdf`,
+                                `certificate-${r.id}.pdf`,
+                              ).catch(() =>
+                                toast(
+                                  "Не удалось скачать справку: проверьте доступ к результату",
+                                  true,
+                                ),
+                              )
+                            }
+                          >
+                            Скачать PDF
+                          </Button>
+                          <Button size="sm" variant="ghost" asChild>
+                            <Link to={`/certificates/${r.id}`}>
+                              Открыть справку
+                            </Link>
+                          </Button>
+                        </div>
+                      ) : (
+                        <span>Недоступно по текущей связи</span>
+                      )}
+                    </td>
+                    )}
                   </tr>
                 ))}
             </Table>
@@ -369,20 +504,22 @@ export function History() {
           )}
         </State>
       </section>
-      <section className="panel section-gap">
-        <div className="panel-heading">
-          <h2>Отчёт о выступлениях спортсмена</h2>
-        </div>
-        {a.data?.map((x: any) => (
-          <div className="simple-row" key={x.id}>
-            <span>{x.full_name}</span>
-            <ExportButtons
-              base={"/exports/athlete/" + x.id}
-              name={"athlete-" + x.id}
-            />
+      {personal && (
+        <section className="panel section-gap">
+          <div className="panel-heading">
+            <h2>Отчёт о выступлениях спортсмена</h2>
           </div>
-        ))}
-      </section>
+          {a.data?.map((x: any) => (
+            <div className="simple-row" key={x.id}>
+              <span>{x.full_name}</span>
+              <ExportButtons
+                base={"/exports/athlete/" + x.id}
+                name={"athlete-" + x.id}
+              />
+            </div>
+          ))}
+        </section>
+      )}
     </>
   );
 }
@@ -394,6 +531,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
     full_name: athlete.full_name,
     sex: athlete.sex || "",
     organization_id: athlete.organization_id,
+    organization_since: today(),
     municipality: athlete.municipality,
     training_stage: athlete.training_stage || "",
     rusada_date: athlete.rusada_date || null,
@@ -401,6 +539,9 @@ export function ProfileEditor({ athlete, onSaved }: any) {
     disciplines: athlete.disciplines || [],
   });
   const change = (k: string, val: any) => setV({ ...v, [k]: val });
+  const moved =
+    (v.organization_id || null) !== (athlete.organization_id || null);
+  const history = athlete.organization_history || [];
   return (
     <form
       onSubmit={async (e) => {
@@ -411,6 +552,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             url: "/athletes/" + athlete.id,
             data: {
               ...v,
+              organization_since: moved ? v.organization_since : null,
               sex: v.sex || null,
               disciplines: v.disciplines.map(
                 ({ discipline_id, start_year, end_year }: any) => ({
@@ -436,6 +578,9 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             value={v.full_name}
             onChange={(e) => change("full_name", e.target.value)}
           />
+        </Field>
+        <Field label="Дата рождения" hint="Указана при регистрации">
+          <input type="date" readOnly value={athlete.birth_date || ""} />
         </Field>
         <Field label="Пол" hint="Нужен для возрастных групп соревнований">
           <select value={v.sex} onChange={(e) => change("sex", e.target.value)}>
@@ -472,6 +617,34 @@ export function ProfileEditor({ athlete, onSaved }: any) {
           </select>
         </Field>
       </div>
+      {moved && (
+        <Field
+          label="Дата перехода"
+          hint="С этой даты спортсмен учитывается в новой организации"
+        >
+          <input
+            type="date"
+            required
+            max={today()}
+            value={v.organization_since}
+            onChange={(e) => change("organization_since", e.target.value)}
+          />
+        </Field>
+      )}
+      {history.length > 0 && (
+        <div className="form-section">
+          <h3>История организаций</h3>
+          {history.map((p: any) => (
+            <div className="simple-row" key={p.id}>
+              <span>{p.organization}</span>
+              <small>
+                {date(p.start_date)} —{" "}
+                {p.end_date ? date(p.end_date) : "по н. в."}
+              </small>
+            </div>
+          ))}
+        </div>
+      )}
       <Field label="Этап подготовки">
         <input
           value={v.training_stage}
@@ -615,10 +788,27 @@ export function Profile() {
   const { user, role } = useAuth();
   if (role === "coach" || role === "judge")
     return <StaffProfile kind={role} id={user[role + "_id"]} />;
+  if (role === "admin" || role === "ministry")
+    return (
+      <>
+        <PageTitle title="Мой профиль" description="Данные вашей учётной записи и документы." />
+        <div className="profile-layout">
+          <section className="panel form-panel">
+            <Field label="ФИО"><input readOnly value={user.full_name} /></Field>
+            <Field label="Электронная почта"><input readOnly value={user.email} /></Field>
+            <Field label="Дата рождения"><input readOnly type="date" value={user.birth_date || ""} /></Field>
+            <Field label="Активный кабинет"><input readOnly value={roleNames[role]} /></Field>
+            <Field label="Доступные роли"><input readOnly value={user.roles.map((r: string) => roleNames[r] || r).join(", ")} /></Field>
+          </section>
+          <aside><ProfileDocuments user={user} /></aside>
+        </div>
+      </>
+    );
   return <AthleteProfile user={user} />;
 }
 
 function AthleteProfile({ user }: any) {
+  const toast = useToast();
   const q = useData("/athletes/" + user.athlete_id);
   return (
     <>
@@ -633,21 +823,37 @@ function AthleteProfile({ user }: any) {
           </State>
         </section>
         <aside>
-          <section className="panel info-card">
-            <ShieldCheck className="text-primary" />
-            <h2>Согласия и документы</h2>
+          <PassportPanel user={user} />
+          {q.data && <ProfileSportsSummary athlete={q.data} />}
+          <section className="panel info-card section-gap">
+            <h2>Мой ID спортсмена</h2>
             <p>
-              Согласие на обработку персональных данных сохранено{" "}
-              {date(user.consent_at)}.
+              Передайте ID капитану, чтобы он пригласил именно вас в команду.
             </p>
-            <small>Версия {user.consent_version}</small>
-            {user.guardian_name && (
-              <p>
-                Представитель: {user.guardian_name}. Согласие:{" "}
-                {date(user.guardian_consent_at)}.
-              </p>
-            )}
+            <Field label="Публичный ID спортсмена">
+              <input
+                readOnly
+                value={q.data?.public_id || user.athlete_public_id || ""}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            </Field>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!q.data?.public_id}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(q.data.public_id);
+                  toast("ID скопирован");
+                } catch {
+                  toast("Выделите ID и скопируйте его через Ctrl+C", true);
+                }
+              }}
+            >
+              Скопировать ID
+            </Button>
           </section>
+          <ProfileDocuments user={user} />
           <section className="panel info-card section-gap">
             <h2>Чистый спорт</h2>
             <p>Информация об антидопинговом образовании и прохождении курса.</p>
@@ -697,7 +903,13 @@ export function Coaching() {
               {q.data.map((l: any) => (
                 <tr key={l.id}>
                   <td>
-                    <strong>{l.athlete}</strong>
+                    <Link
+                      className="text-link"
+                      to={`/athletes/${l.athlete_id}/profile`}
+                    >
+                      <strong>{l.athlete}</strong>
+                    </Link>
+                    <small>{l.athlete_public_id}</small>
                     <details>
                       <summary>История связи</summary>
                       {l.history.map((h: any) => (
@@ -722,6 +934,20 @@ export function Coaching() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      {["coach", "admin"].includes(role) &&
+                        l.status === "active" && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={`/coaching/athletes/${l.athlete_id}`}>
+                              Сводка выступлений
+                            </Link>
+                          </Button>
+                        )}
+                      {["coach", "admin"].includes(role) &&
+                        l.status === "active" && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={`/path/${l.athlete_id}`}>Личный путь</Link>
+                          </Button>
+                        )}
                       {role === "athlete" &&
                         ["pending", "paused"].includes(l.status) && (
                           <Button
@@ -826,44 +1052,6 @@ export function Coaching() {
     </>
   );
 }
-export function Assignments() {
-  const q = useData("/assignments");
-  return (
-    <>
-      <PageTitle
-        title="Мои назначения"
-        description="Предстоящие соревнования и история работы в судейской коллегии."
-      />
-      <section className="panel">
-        <State query={q}>
-          {q.data?.length ? (
-            <Table heads={["Соревнование", "Дата", "Должность", "Статус"]}>
-              {q.data.map((j: any) => (
-                <tr key={j.competition_id}>
-                  <td>
-                    <Link to={"/competitions/" + j.competition_id}>
-                      {j.title}
-                    </Link>
-                  </td>
-                  <td>{date(j.start_date)}</td>
-                  <td>{j.position}</td>
-                  <td>
-                    <Badge value={j.state} />
-                  </td>
-                </tr>
-              ))}
-            </Table>
-          ) : (
-            <Empty
-              text="Пока нет назначений"
-              hint="Федерация назначает судей на соревнования."
-            />
-          )}
-        </State>
-      </section>
-    </>
-  );
-}
 export function Notifications() {
   const q = useData("/notifications");
   const action = useAction();
@@ -888,6 +1076,14 @@ export function Notifications() {
                 <div>
                   <h3>{n.title}</h3>
                   <p>{n.body}</p>
+                  {n.event_key.startsWith("competition-team:") && (
+                    <Link
+                      className="text-link"
+                      to={`/competitions/${n.event_key.split(":")[1]}?tab=teams`}
+                    >
+                      Открыть команду
+                    </Link>
+                  )}
                   <small>
                     {date(n.created_at)} ·{" "}
                     {n.mailed_at
@@ -969,13 +1165,22 @@ export function Audit() {
                     <td>
                       <strong>{x.action}</strong>
                       <small>
-                        {x.entity} #{x.entity_id}
+                        {auditEntity(x.entity, x.entity_id)}
                       </small>
                     </td>
                     <td>
-                      <code className="audit-detail">
-                        {JSON.stringify(x.details)}
-                      </code>
+                      {auditDetails(x.details).length ? (
+                        <dl className="audit-detail">
+                          {auditDetails(x.details).map(([label, value]) => (
+                            <div key={label}>
+                              <dt>{label}:</dt>
+                              <dd>{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <span className="muted">Нет дополнительных сведений</span>
+                      )}
                     </td>
                   </tr>
                 ))}

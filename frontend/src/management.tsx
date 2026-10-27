@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Archive,
@@ -29,6 +29,7 @@ import {
 import { useAction, useAuth, useData } from "./state";
 import {
   ageRange,
+  chartColors,
   ageRules,
   date,
   levels,
@@ -53,6 +54,7 @@ import {
 } from "./components/shared";
 import { ProfileEditor } from "./pages";
 import { ArchiveForm, StaffEditor, staffKinds } from "./staff";
+import { Indicators } from "./indicators";
 
 export function Registry() {
   const { role } = useAuth();
@@ -223,9 +225,16 @@ export function Registry() {
                           {a.full_name.replace("Демо · ", "").slice(0, 1)}
                         </span>
                         <div>
-                          <strong>{a.full_name.replace("Демо · ", "")}</strong>
+                          <Link
+                            className="text-link"
+                            to={`/athletes/${a.id}/profile`}
+                          >
+                            <strong>
+                              {a.full_name.replace("Демо · ", "")}
+                            </strong>
+                          </Link>
                           <small>
-                            {a.age} лет · ID {a.id}
+                            {a.age} лет · {a.public_id}
                           </small>
                         </div>
                       </div>
@@ -577,13 +586,13 @@ export function Registry() {
   );
 }
 
-function RankRequest({ onDone }: any) {
+function RankRequest({ onDone, initial = {} }: any) {
   const { role } = useAuth();
   const results = useData("/results", role !== "judge");
   const action = useAction();
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState(initial.result || "");
   const [name, setName] = useState(
-    role === "judge" ? "Судья третьей категории" : "III",
+    initial.rank || (role === "judge" ? "Судья третьей категории" : "III"),
   );
   const [kind, setKind] = useState("assignment");
   return (
@@ -742,7 +751,13 @@ export function Ranks() {
   const list = useData("/rank-applications");
   const current = useData("/ranks");
   const candidates = useData("/evsk-candidates", role === "admin");
-  const [show, setShow] = useState(false);
+  // Личный путь открывает форму с готовым основанием: ?result=…&rank=…
+  const [params] = useSearchParams();
+  const initial = {
+    result: params.get("result") || "",
+    rank: params.get("rank") || "",
+  };
+  const [show, setShow] = useState(role !== "admin" && !!initial.result);
   const [review, setReview] = useState<any>(null);
   return (
     <>
@@ -750,7 +765,7 @@ export function Ranks() {
         title="Разряды и судейские категории"
         description="Заявки, основания присвоения и контроль сроков действия."
       >
-        {role !== "admin" && (
+        {role !== "admin" && role !== "ministry" && (
           <Button onClick={() => setShow(true)}>
             <Plus size={16} />
             Подать заявку
@@ -886,7 +901,7 @@ export function Ranks() {
         </section>
       )}
       <Dialog open={show} onOpenChange={setShow} title="Заявка на квалификацию">
-        <RankRequest onDone={() => setShow(false)} />
+        <RankRequest initial={initial} onDone={() => setShow(false)} />
       </Dialog>
       <Dialog
         open={!!review}
@@ -1009,7 +1024,12 @@ export function Ratings() {
                     </span>
                   </td>
                   <td>
-                    <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                    <Link
+                      className="text-link"
+                      to={`/athletes/${r.athlete_id}/profile`}
+                    >
+                      <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                    </Link>
                     <small>{r.age} лет</small>
                     <details>
                       <summary>Как рассчитан рейтинг</summary>
@@ -1089,7 +1109,12 @@ export function Ratings() {
         </div>
         {team.data?.map((t: any) => (
           <div className="simple-row" key={t.athlete_id}>
-            <span>{t.full_name}</span>
+            <Link
+              className="text-link"
+              to={`/athletes/${t.athlete_id}/profile`}
+            >
+              {t.full_name}
+            </Link>
             {!t.eligible && (
               <Badge value="rejected" label="Действует отстранение" />
             )}
@@ -1230,7 +1255,7 @@ export function Reports() {
                 <Bar
                   name="Спортсменов"
                   dataKey="count"
-                  fill="#bb2e40"
+                  fill={chartColors.primary}
                   radius={[5, 5, 0, 0]}
                   maxBarSize={80}
                 />
@@ -1253,6 +1278,7 @@ export function Reports() {
           )}
         </State>
       </section>
+      <Indicators start={start} end={end} />
     </>
   );
 }
@@ -1533,6 +1559,12 @@ function AgeGroups() {
 }
 export function Settings() {
   const users = useData("/users");
+  const [userSearch, setUserSearch] = useState("");
+  const searchTerms = userSearch.toLocaleLowerCase("ru").trim().split(/\s+/).filter(Boolean);
+  const filteredUsers = users.data?.filter((u: any) => {
+    const text = `${u.full_name} ${u.email}`.toLocaleLowerCase("ru");
+    return searchTerms.every((term) => text.includes(term));
+  });
   const rules = useData("/rating-rules");
   const meta = useData("/metadata");
   const evsk = useData("/evsk-rules");
@@ -1592,11 +1624,30 @@ export function Settings() {
         )}
         {tab === "users" && (
           <State query={users}>
-            <Table heads={["Пользователь", "Доступные роли", ""]}>
-              {users.data?.map((u: any) => (
-                <UserRoles key={u.id} u={u} />
-              ))}
-            </Table>
+            <div className="toolbar">
+              <SearchBox
+                value={userSearch}
+                onChange={setUserSearch}
+                placeholder="Поиск пользователей по имени или email"
+              />
+              <span className="inline-note" role="status">
+                Найдено: {filteredUsers?.length ?? 0} из {users.data?.length ?? 0}
+              </span>
+              {userSearch && (
+                <Button variant="ghost" onClick={() => setUserSearch("")}>
+                  Сбросить поиск
+                </Button>
+              )}
+            </div>
+            {filteredUsers?.length ? (
+              <Table heads={["Пользователь", "Доступные роли", ""]}>
+                {filteredUsers.map((u: any) => (
+                  <UserRoles key={u.id} u={u} />
+                ))}
+              </Table>
+            ) : (
+              <Empty text="Пользователи не найдены" hint="Измените имя или email либо сбросьте поиск." />
+            )}
           </State>
         )}
         {tab === "references" && (

@@ -11,7 +11,7 @@ from app.config import settings
 from urllib.parse import urlsplit, urlunsplit
 from bot.profile import profile_text
 
-ROLE_NAMES = {"athlete": "Спортсмен", "coach": "Тренер", "judge": "Судья", "admin": "Федерация"}
+ROLE_NAMES = {"athlete": "Спортсмен", "coach": "Тренер", "judge": "Судья", "admin": "Федерация", "ministry": "Минспорт"}
 STATUS = {"pending": "На рассмотрении", "approved": "Одобрено", "rejected": "Отклонено",
           "draft": "Черновик", "open": "Приём заявок", "closed": "Приём закрыт", "published": "Результаты"}
 SECTIONS = {"profile": "Личный кабинет", "competitions": "Соревнования", "applications": "Мои заявки",
@@ -23,6 +23,7 @@ ROLE_SECTIONS = {
     "coach": ("profile", "athletes", "competitions", "ranks"),
     "judge": ("profile", "assignments", "competitions"),
     "admin": ("profile", "applications", "ranks", "deadlines"),
+    "ministry": ("profile", "competitions", "deadlines"),
 }
 ROLE_LABELS = {
     "coach": {"ranks": "Разряды моих спортсменов"},
@@ -89,7 +90,7 @@ def render(db, link, user, section, page):
         return "Нет доступных кабинетов. Обратитесь в федерацию.", []
     if section == "roles":
         buttons = [button(ROLE_NAMES[r], f"role:{r}")
-                   for r in ("admin", "athlete", "coach", "judge") if r in roles]
+                   for r in ("admin", "athlete", "coach", "judge", "ministry") if r in roles]
         return "Выберите роль. На сайте кабинет не изменится.", [
             *[buttons[i:i + 2] for i in range(0, len(buttons), 2)],
             [button(SECTIONS["logout"], "view:logout:0")]]

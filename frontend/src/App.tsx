@@ -8,6 +8,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 import {
   Activity,
@@ -16,7 +17,6 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   ChevronDown,
-  Code2,
   FileCheck2,
   FileText,
   Gavel,
@@ -28,28 +28,55 @@ import {
   Trophy,
   Users,
   X,
+  ClipboardList,
+  BookOpen,
+  Route as RouteIcon,
+  Award,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames } from "./lib";
 import { useAuth, useData, useToast } from "./state";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
+import { FspLogo } from "./components/logo";
 import {
   Overview,
   History,
   Profile,
   Coaching,
-  Assignments,
   Notifications,
   Deadlines,
   Audit,
 } from "./pages";
 import { Competitions, CompetitionDetail } from "./competitions";
 import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
+import { GovernorAwards } from "./awards";
+
+import {
+  AthleteProfileView,
+  PrivateCertificate,
+  LegacyPublicProfile,
+} from "./public-passport";
+import { AthleteSummary } from "./athlete-summary";
+import { Assignments, JudgingHistory } from "./judging";
+import { Navigator } from "./navigator";
+import { Help, PersonalPath, PublicGlossary } from "./path";
+
+import { CertificateVerification } from "./certificate-verification";
 
 function Login() {
   const auth = useAuth();
-  const [register, setRegister] = useState(false);
+  const loginLocation = useLocation();
+  const returnTo =
+    new URLSearchParams(loginLocation.search).get("returnTo") || "/";
+  const safeReturn =
+    /^\/(?:competitions(?:\/[0-9]+)?|certificates\/[0-9]+(?:\?version=[0-9]+)?|athletes\/[0-9]+\/profile)$/.test(
+      returnTo,
+    )
+      ? returnTo
+      : "/";
+  const [params] = useSearchParams();
+  const [register, setRegister] = useState(params.get("register") === "1");
   const [error, setError] = useState("");
   const [form, setForm] = useState<any>({
     email: "",
@@ -78,18 +105,13 @@ function Login() {
     onSuccess: auth.login,
     onError: (e) => setError(errorText(e)),
   });
-  if (auth.token) return <Navigate to="/" replace />;
+  if (auth.restoring) return <div className="state full-screen">Восстанавливаем вход…</div>;
+  if (auth.token) return <Navigate to={safeReturn} replace />;
   return (
     <div className="auth-page">
       <section className="auth-story">
         <Link to="/" className="brand">
-          <span className="brand-icon">
-            <Code2 />
-          </span>
-          <span>
-            орен<span className="brand-red">код</span>
-            <small>ФЕДЕРАЦИЯ СПОРТИВНОГО ПРОГРАММИРОВАНИЯ</small>
-          </span>
+          <FspLogo className="brand-logo" />
         </Link>
         <div>
           <div className="eyebrow">ОРЕНБУРГСКАЯ ОБЛАСТЬ · 2026</div>
@@ -265,6 +287,10 @@ function Login() {
               {register ? "Войти" : "Регистрация"}
             </button>
           </div>
+          <Link className="auth-navigator" to="/start">
+            Новичкам: дисциплины, где заниматься и ближайшие старты{" "}
+            <ArrowRight size={14} />
+          </Link>
           <div className="demo-note">
             <strong>Демонстрационный доступ</strong>
             <span>admin@demo.example / DemoPass2026!</span>
@@ -280,15 +306,15 @@ const navigation = [
     to: "/",
     label: "Обзор",
     icon: LayoutDashboard,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
     to: "/competitions",
     label: "Соревнования",
     icon: CalendarDays,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
-  { to: "/registry", label: "Реестр", icon: Users, roles: ["admin", "coach"] },
+  { to: "/registry", label: "Реестр", icon: Users, roles: ["admin", "coach", "ministry"] },
   {
     to: "/coaching",
     label: "Связи с тренерами",
@@ -299,39 +325,63 @@ const navigation = [
     to: "/history",
     label: "Результаты",
     icon: ChartNoAxesCombined,
-    roles: ["admin", "athlete", "coach"],
+    roles: ["admin", "athlete", "coach", "ministry"],
   },
   {
     to: "/assignments",
-    label: "Мои назначения",
+    label: "Назначения",
     icon: Gavel,
     roles: ["judge"],
+  },
+  {
+    to: "/judging",
+    label: "Мои соревнования",
+    icon: ClipboardList,
+    roles: ["judge"],
+  },
+  {
+    to: "/path",
+    label: "Личный путь",
+    icon: RouteIcon,
+    roles: ["athlete"],
   },
   {
     to: "/ranks",
     label: "Разряды и категории",
     icon: FileCheck2,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
     to: "/ratings",
     label: "Рейтинг и сборная",
     icon: Trophy,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
+  },
+  {
+    to: "/awards",
+    label: "Премии Губернатора",
+    icon: Award,
+    roles: ["admin", "ministry"],
   },
   {
     to: "/reports",
     label: "Аналитика и отчёты",
     icon: FileText,
-    roles: ["admin"],
+    roles: ["admin", "ministry"],
   },
   { to: "/audit", label: "Журнал действий", icon: Activity, roles: ["admin"] },
+  {
+    to: "/help",
+    label: "Справочник понятий",
+    icon: BookOpen,
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
+  },
   { to: "/settings", label: "Управление", icon: Settings2, roles: ["admin"] },
   {
     to: "/profile",
     label: "Мой профиль",
     icon: ShieldCheck,
-    roles: ["athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
 ];
 function Layout() {
@@ -343,7 +393,17 @@ function Layout() {
   }, [location.pathname]);
   const navigate = useNavigate();
   const notices = useData("/notifications", !!auth.token);
-  if (!auth.token) return <Navigate to="/login" replace />;
+  if (auth.restoring) return <div className="state full-screen">Восстанавливаем вход…</div>;
+  if (!auth.token)
+    return (
+      <Navigate
+        to={
+          "/login?returnTo=" +
+          encodeURIComponent(location.pathname + location.search)
+        }
+        replace
+      />
+    );
   if (auth.loading)
     return <div className="state full-screen">Открываем кабинет…</div>;
   if (auth.error)
@@ -366,13 +426,7 @@ function Layout() {
       )}
       <aside className={"sidebar " + (mobile ? "sidebar-visible" : "")}>
         <Link className="brand" to="/">
-          <span className="brand-icon">
-            <Code2 />
-          </span>
-          <span>
-            орен<span className="brand-red">код</span>
-            <small>ЦИФРОВАЯ ПЛАТФОРМА ФСП</small>
-          </span>
+          <FspLogo className="brand-logo" />
         </Link>
         <div className="region-label">
           Оренбургская область <span>2026</span>
@@ -395,7 +449,7 @@ function Layout() {
         </nav>
         <div className="sidebar-bottom">
           <div className="federation-mark">
-            <Code2 size={24} />
+            <FspLogo variant="mark" className="federation-logo" />
             <div>
               Федерация спортивного
               <br />
@@ -419,7 +473,7 @@ function Layout() {
             </button>
             <span>Платформа ФСП</span>
             <span className="breadcrumb-slash">/</span>
-            <strong>{current?.label || "Уведомления"}</strong>
+            <strong>{current?.label || (location.pathname.startsWith("/athletes/") ? "Профиль спортсмена" : location.pathname.startsWith("/certificates/") ? "Справка об участии" : "Уведомления")}</strong>
           </div>
           <div className="topbar-right">
             <label className="role-switch">
@@ -468,7 +522,7 @@ function Layout() {
               <Bell size={20} />
               {unread > 0 && <i>{unread > 9 ? "9+" : unread}</i>}
             </Link>
-            <div className="topbar-user">
+            <Link to="/profile" className="topbar-user" aria-label="Открыть мой профиль" title="Мой профиль">
               <span className="avatar">
                 {auth.user.full_name.replace("Демо · ", "").slice(0, 1)}
               </span>
@@ -476,7 +530,7 @@ function Layout() {
                 <strong>{auth.user.full_name.replace("Демо · ", "")}</strong>
                 <small>{roleNames[auth.role]}</small>
               </div>
-            </div>
+            </Link>
             <button
               onClick={auth.logout}
               className="icon-btn"
@@ -507,14 +561,29 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/check-certificate/:checkToken" element={<CertificateVerification />} />
+      <Route path="/p/:slug" element={<LegacyPublicProfile />} />
+      <Route path="/verify/:digest" element={<LegacyPublicProfile />} />
+      <Route path="/passport-preview" element={<LegacyPublicProfile />} />
+      <Route path="/start" element={<Navigator />} />
+      <Route path="/glossary" element={<PublicGlossary />} />
       <Route element={<Layout />}>
         <Route index element={<Overview />} />
+        <Route path="athletes/:id/profile" element={<AthleteProfileView />} />
+        <Route
+          path="certificates/:id"
+          element={
+            <Guard roles={["athlete", "coach", "admin"]}>
+              <PrivateCertificate />
+            </Guard>
+          }
+        />
         <Route path="competitions" element={<Competitions />} />
         <Route path="competitions/:id" element={<CompetitionDetail />} />
         <Route
           path="registry"
           element={
-            <Guard roles={["admin", "coach"]}>
+            <Guard roles={["admin", "coach", "ministry"]}>
               <Registry />
             </Guard>
           }
@@ -522,7 +591,7 @@ export default function App() {
         <Route
           path="history"
           element={
-            <Guard roles={["admin", "athlete", "coach"]}>
+            <Guard roles={["admin", "athlete", "coach", "ministry"]}>
               <History />
             </Guard>
           }
@@ -536,6 +605,14 @@ export default function App() {
           }
         />
         <Route
+          path="coaching/athletes/:id"
+          element={
+            <Guard roles={["coach", "admin"]}>
+              <AthleteSummary />
+            </Guard>
+          }
+        />
+        <Route
           path="assignments"
           element={
             <Guard roles={["judge"]}>
@@ -543,12 +620,33 @@ export default function App() {
             </Guard>
           }
         />
+        <Route
+          path="judging"
+          element={<Guard roles={["judge"]}><JudgingHistory /></Guard>}
+        />
+        <Route
+          path="path"
+          element={<Guard roles={["athlete"]}><PersonalPath /></Guard>}
+        />
+        <Route
+          path="path/:id"
+          element={<Guard roles={["coach", "admin"]}><PersonalPath /></Guard>}
+        />
+        <Route path="help" element={<Help />} />
         <Route path="ranks" element={<Ranks />} />
         <Route path="ratings" element={<Ratings />} />
         <Route
+          path="awards"
+          element={
+            <Guard roles={["admin", "ministry"]}>
+              <GovernorAwards />
+            </Guard>
+          }
+        />
+        <Route
           path="reports"
           element={
-            <Guard roles={["admin"]}>
+            <Guard roles={["admin", "ministry"]}>
               <Reports />
             </Guard>
           }
@@ -572,7 +670,7 @@ export default function App() {
         <Route
           path="profile"
           element={
-            <Guard roles={["athlete", "coach", "judge"]}>
+            <Guard roles={["admin", "athlete", "coach", "judge", "ministry"]}>
               <Profile />
             </Guard>
           }

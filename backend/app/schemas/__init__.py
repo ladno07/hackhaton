@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_validator
 
-RoleName = Literal["admin", "athlete", "coach", "judge"]
+RoleName = Literal["admin", "athlete", "coach", "judge", "ministry"]
 Level = Literal["regional", "interregional", "russian_championship", "russian_junior"]
 Status = Literal["regional", "interregional", "national"]
 RatingClass = Literal["main", "junior", "other"]
@@ -67,6 +67,10 @@ class CompetitionIn(Strict):
     calendar_plan: str = Field(min_length=2, max_length=100)
     calendar_number: str = Field(min_length=1, max_length=80)
     regulation_url: HttpUrl | None = None
+    entry_mode: Literal["individual", "team"] = "individual"
+    team_min: int = Field(2, ge=1, le=50)
+    team_max: int = Field(3, ge=1, le=50)
+    team_rating: bool = False
 
     @model_validator(mode="after")
     def dates(self):
@@ -77,6 +81,8 @@ class CompetitionIn(Strict):
             or self.min_age > self.max_age
         ):
             raise ValueError("Проверьте даты и возрастные ограничения")
+        if self.team_min > self.team_max:
+            raise ValueError("Минимальный состав команды больше максимального")
         expected = "Оренбургская область" if self.status == "regional" else "ЕКП"
         if self.calendar_plan != expected:
             raise ValueError(f"Для выбранного статуса календарный план: {expected}")
@@ -142,8 +148,21 @@ class ResultIn(Strict):
     team_name: str | None = Field(None, min_length=1, max_length=120)
 
 
+class TeamResultIn(Strict):
+    team_id: int
+    place: int = Field(gt=0)
+    score: float = Field(ge=0, allow_inf_nan=False)
+
+
 class ResultsIn(Strict):
-    results: list[ResultIn] = Field(min_length=1)
+    results: list[ResultIn] = Field(default_factory=list, max_length=10000)
+    team_results: list[TeamResultIn] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def one_mode(self):
+        if bool(self.results) == bool(self.team_results):
+            raise ValueError("Передайте результаты спортсменов или команд")
+        return self
 
 
 class ProtocolCorrectionIn(ResultsIn):
@@ -182,6 +201,8 @@ class ProfileIn(Strict):
     full_name: str = Field(min_length=3, max_length=200)
     sex: Sex | None = None
     organization_id: int | None = None
+    # date of the transfer when organization_id changes; today by default
+    organization_since: date | None = None
     municipality: str = Field(min_length=2, max_length=120)
     training_stage: str | None = Field(None, max_length=120)
     rusada_date: date | None = None
@@ -292,7 +313,7 @@ class SuspensionIn(Strict):
 class EvskIn(Strict):
     discipline_id: int
     level: Level
-    rank_name: str = Field(min_length=2, max_length=100)
+    rank_name: str = Field(min_length=1, max_length=100)
     max_place: int = Field(ge=1)
     min_participants: int = Field(ge=1)
     source: str = Field(min_length=10, max_length=2000)
@@ -302,3 +323,82 @@ class DeadlineIn(Strict):
     title: str = Field(min_length=3, max_length=240)
     due_on: date
     done: bool = False
+
+
+class TeamCreateIn(Strict):
+    name: str = Field(min_length=2, max_length=120)
+    captain_id: int
+
+
+class TeamMemberIn(Strict):
+    athlete_id: int | None = Field(None, gt=0)
+    public_id: str | None = Field(None, min_length=10, max_length=14)
+
+    @model_validator(mode="after")
+    def one_identifier(self):
+        if (self.athlete_id is None) == (self.public_id is None):
+            raise ValueError("Укажите один идентификатор спортсмена")
+        return self
+
+
+class TeamResponseIn(Strict):
+    status: Literal["accepted", "declined"]
+
+
+class TeamReviewIn(Strict):
+    status: Literal["approved", "returned"]
+    comment: str = Field("", max_length=2000)
+
+
+class TeamReopenIn(Strict):
+    reason: str = Field(min_length=5, max_length=2000)
+
+
+class PassportSettingsIn(Strict):
+    enabled: bool
+    show_results: bool = True
+    show_rating: bool = True
+    show_team: bool = True
+    show_rusada: bool = False
+    consent: bool = False
+
+
+class ProfileVisibilityIn(Strict):
+    show_results: bool = True
+    show_rating: bool = True
+    show_ranks: bool = True
+    show_disciplines: bool = True
+    show_organization: bool = True
+    show_municipality: bool = True
+    show_team: bool = True
+    show_rusada: bool = False
+    show_training_stage: bool = False
+    show_training_years: bool = False
+
+
+class IndicatorIn(Strict):
+    year: int = Field(ge=1970, le=2100)
+    name: str = Field(min_length=3, max_length=240)
+    value: float = Field(ge=0, le=1e12)
+    unit: str = Field("чел.", min_length=1, max_length=40)
+    organization_id: int | None = None
+    source: str = Field(min_length=5, max_length=2000)
+    comment: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def not_future(self):
+        if self.year > date.today().year:
+            raise ValueError("Показатель не может относиться к будущему году")
+        return self
+
+
+class AwardRuleIn(Strict):
+    first: int = Field(ge=0, le=10_000_000)
+    second: int = Field(ge=0, le=10_000_000)
+    third: int = Field(ge=0, le=10_000_000)
+
+
+class AwardStatusIn(Strict):
+    status: Literal["candidate", "nominated", "awarded", "rejected"]
+    comment: str = Field("", max_length=2000)
+    order_number: str | None = Field(None, max_length=120)

@@ -10,8 +10,10 @@ from app.security import password_hash, Actor
 from app.services.common import audit, age_at
 from app.services.ratings import recalculate
 from app.services.notifications import notify
-from app.services.reports import export_document
+from app.config import settings
+from app.services.documents import OfficialDocument, export_document
 from app.services.protocols import add_version
+from app.services.awards import DEFAULT_AMOUNTS, achievements
 
 DISCIPLINES = [
     ("Программирование алгоритмическое", "Алгоритмы"),
@@ -47,20 +49,110 @@ FEMALE_NAMES = {
 }
 
 
+ROLES = [
+    ("admin", "Федерация"),
+    ("athlete", "Спортсмен"),
+    ("coach", "Тренер"),
+    ("judge", "Судья"),
+    ("ministry", "Минспорт"),
+]
+MINISTRY_DEMO = "minsport@demo.example"
+
+
+def ministry_demo(db):
+    """Read-only ministry account; the demo admin can also switch to this cabinet."""
+    ministry = db.get(Role, "ministry")
+    admin = db.scalar(select(User).where(User.email == "admin@demo.example"))
+    if admin and ministry not in admin.roles:
+        admin.roles = [*admin.roles, ministry]
+    if db.scalar(select(User.id).where(User.email == MINISTRY_DEMO)):
+        return
+    user = User(
+        email=MINISTRY_DEMO,
+        full_name="Демо · Ольга Степнова",
+        birth_date=date(1984, 3, 9),
+        sex="female",
+        password_hash=password_hash.hash(os.getenv("DEMO_PASSWORD", "DemoPass2026!")),
+    )
+    user.roles = [ministry]
+    db.add(user)
+    db.flush()
+
+
+def indicators_demo(db, admin, year):
+    """Entered indicators with sources; one has a sample statistical form."""
+    form = DevelopmentIndicator(
+        year=year,
+        name="Численность занимающихся по форме № 1-ФК",
+        value=148,
+        unit="чел.",
+        source=f"Форма федерального статистического наблюдения № 1-ФК за {year} г., раздел «Спортивное программирование»",
+        comment="Демонстрационное значение, не является официальной статистикой",
+        updated_by=admin.id,
+    )
+    pdf = export_document(
+        OfficialDocument(
+            kind="Сведения",
+            title=f"о численности занимающихся за {year} год",
+            headers=["Показатель", "Значение"],
+            rows=[
+                ["Численность занимающихся", "148 чел."],
+                ["Из них в возрасте до 18 лет", "97 чел."],
+                ["Документ", "Демонстрационный образец, не имеет силы"],
+            ],
+            dated=date(year + 1, 1, 15),
+            signatures=[(settings.fsp_head_position, settings.fsp_head_name)],
+        ),
+        "pdf",
+    )
+    form.documents.append(
+        IndicatorDocument(
+            filename=f"Форма 1-ФК за {year} год.pdf",
+            content_type="application/pdf",
+            size=len(pdf),
+            data=pdf,
+            uploaded_by=admin.id,
+        )
+    )
+    db.add_all(
+        [
+            form,
+            DevelopmentIndicator(
+                year=year,
+                name="Спортивных площадок для занятий",
+                value=6,
+                unit="ед.",
+                source="Отчёты организаций, представленные в федерацию по итогам года",
+                comment="Демонстрационное значение",
+                updated_by=admin.id,
+            ),
+        ]
+    )
+
+
+def awards_demo(db, admin, year):
+    """The winner of the demo interregional cup is already in the petition."""
+    found = achievements(db, year)
+    athlete_id, items = min(found.items(), key=lambda x: x[1][0]["place"])
+    db.add(
+        GovernorAward(
+            year=year,
+            athlete_id=athlete_id,
+            status="nominated",
+            amount=items[0]["amount"],
+            basis=items[0],
+            comment="Демо: решение совета федерации",
+            updated_by=admin.id,
+        )
+    )
+
+
 def seed(demo=False):
     with SessionLocal() as db:
-        if not db.get(Role, "admin"):
-            db.add_all(
-                [
-                    Role(id=k, name=v)
-                    for k, v in [
-                        ("admin", "Федерация"),
-                        ("athlete", "Спортсмен"),
-                        ("coach", "Тренер"),
-                        ("judge", "Судья"),
-                    ]
-                ]
-            )
+        for k, v in ROLES:
+            if not db.get(Role, k):
+                db.add(Role(id=k, name=v))
+        db.flush()
         if not db.scalar(select(Discipline.id)):
             db.add_all(
                 [
@@ -102,10 +194,20 @@ def seed(demo=False):
                         level=level, first=values[0], second=values[1], third=values[2]
                     )
                 )
+        for level, values in DEFAULT_AMOUNTS:
+            if not db.get(GovernorAwardRule, level):
+                db.add(
+                    GovernorAwardRule(
+                        level=level, first=values[0], second=values[1], third=values[2]
+                    )
+                )
         db.commit()
-        if not demo or db.scalar(
-            select(User.id).where(User.email == "admin@demo.example")
-        ):
+        if not demo:
+            return
+        if db.scalar(select(User.id).where(User.email == "admin@demo.example")):
+            # Demo data loaded before the ministry cabinet existed: add only it.
+            ministry_demo(db)
+            db.commit()
             return
         today = date.today()
         year = today.year
@@ -128,7 +230,7 @@ def seed(demo=False):
         admin = make(
             "admin@demo.example",
             "Демо · Алексей Северный",
-            ["admin", "athlete", "coach", "judge"],
+            ["admin", "athlete", "coach", "judge", "ministry"],
         )
         trainer = make("coach@demo.example", "Демо · Марина Ветрова", ["coach"])
         referee = make("judge@demo.example", "Демо · Павел Лесной", ["judge"])
@@ -213,6 +315,38 @@ def seed(demo=False):
         db.flush()
         athletes.append(a)
         db.add(AthleteDiscipline(athlete_id=a.id, discipline_id=1, start_year=year - 1))
+        for a in athletes:
+            first = min(
+                db.scalars(
+                    select(AthleteDiscipline.start_year).where(
+                        AthleteDiscipline.athlete_id == a.id
+                    )
+                )
+            )
+            db.add(
+                AthleteOrganization(
+                    athlete_id=a.id,
+                    organization_id=a.organization_id,
+                    start_date=date(first, 1, 1),
+                )
+            )
+        # Demo transfer: the second athlete moved from Orenburg to Orsk last autumn.
+        moved = athletes[1]
+        db.flush()
+        period = db.scalar(
+            select(AthleteOrganization).where(
+                AthleteOrganization.athlete_id == moved.id
+            )
+        )
+        period.organization_id = orgs[0].id
+        period.end_date = date(year - 1, 8, 31)
+        db.add(
+            AthleteOrganization(
+                athlete_id=moved.id,
+                organization_id=moved.organization_id,
+                start_date=date(year - 1, 9, 1),
+            )
+        )
         for a in athletes[1:6]:
             link = AthleteCoach(
                 athlete_id=a.id, coach_id=coach.id, discipline_id=1, status="active"
@@ -281,6 +415,24 @@ def seed(demo=False):
                 result_id=result.id,
             )
         )
+        # Illustrative conditions for the personal path; not real EVSK norms.
+        db.add_all(
+            [
+                EvskRule(
+                    discipline_id=1,
+                    level=level,
+                    rank_name=rank,
+                    max_place=place,
+                    min_participants=count,
+                    source="Демо · условие для показа, не является нормативом ЕВСК",
+                )
+                for rank, level, place, count in [
+                    ("II", "regional", 3, 8),
+                    ("I", "interregional", 2, 8),
+                    ("КМС", "russian_championship", 3, 10),
+                ]
+            ]
+        )
         for i in range(6):
             start = today + timedelta(days=10 + i * 6)
             c = Competition(
@@ -332,18 +484,22 @@ def seed(demo=False):
             else:
                 participants = f"{c.min_age}–{c.max_age} лет на дату старта"
             pdf = export_document(
-                "Положение о проведении соревнования",
-                ["Раздел", "Содержание"],
-                [
-                    ["Наименование", c.title],
-                    ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
-                    ["Место", c.location],
-                    ["Участники", participants],
-                    ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
-                    ["Документ", "Демонстрационный образец, не имеет силы"],
-                ],
+                OfficialDocument(
+                    kind="Положение",
+                    title=f"о проведении соревнования «{c.title}»",
+                    headers=["Раздел", "Содержание"],
+                    rows=[
+                        ["Наименование", c.title],
+                        ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
+                        ["Место", c.location],
+                        ["Участники", participants],
+                        ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
+                        ["Документ", "Демонстрационный образец, не имеет силы"],
+                    ],
+                    number=c.calendar_number,
+                    approve=(settings.fsp_head_position, settings.fsp_head_name),
+                ),
                 "pdf",
-                c.calendar_number,
             )
             db.add(
                 CompetitionRegulation(
@@ -361,6 +517,9 @@ def seed(demo=False):
                 due_on=today + timedelta(days=12),
             )
         )
+        indicators_demo(db, admin, year - 1)
+        awards_demo(db, admin, (today - timedelta(days=30)).year)
+        ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(
             db,

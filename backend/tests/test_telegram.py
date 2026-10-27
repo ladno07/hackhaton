@@ -565,3 +565,15 @@ def test_failed_screen_send_keeps_previous_message():
     with pytest.raises(TelegramError):
         reply_screen(api, 101, "Следующий раздел", previous_message_id=500)
     assert not api.calls
+
+
+def test_bot_handles_ministry_role_after_merge(env):
+    _, factory, _, _ = env
+    with factory() as db:
+        user = db.scalar(select(User).where(User.email == "minsport@demo.example"))
+        link = connect(db, user.id)
+        for section in ("menu", "profile", "roles", "competitions", "deadlines"):
+            body, keyboard = render(db, link, user, section, 0)
+            assert body and keyboard
+        body, _ = render(db, link, user, "applications", 0)
+        assert "недоступен" in body

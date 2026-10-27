@@ -2,6 +2,11 @@ import axios from "axios";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
+// Цвета графиков: recharts пишет их в SVG-атрибуты, где var() не работает
+export const chartColors = {
+  primary: "#402fff",
+  grid: "#ededed",
+};
 export const api = axios.create({ baseURL: "/api" });
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem("token");
@@ -9,6 +14,45 @@ api.interceptors.request.use((config) => {
   const role = sessionStorage.getItem("role");
   if (role) config.headers["X-Active-Role"] = role;
   return config;
+});
+let refreshingSession: Promise<any> | null = null;
+export function refreshSession() {
+  if (!refreshingSession) {
+    refreshingSession = axios.post("/api/auth/refresh").then(({ data }) => {
+      const previousUser = sessionStorage.getItem("orencode.user");
+      sessionStorage.setItem("orencode.user", String(data.user.id));
+      sessionStorage.setItem("token", data.access_token);
+      const savedRole = localStorage.getItem("orencode.role") || sessionStorage.getItem("role");
+      const role = data.user.roles.includes(savedRole) ? savedRole : data.user.roles[0];
+      sessionStorage.setItem("role", role);
+      window.dispatchEvent(new CustomEvent("orencode:session-refreshed", { detail: { accountChanged: !!previousUser && previousUser !== String(data.user.id) } }));
+      return data;
+    }).finally(() => { refreshingSession = null; });
+  }
+  return refreshingSession;
+}
+export async function endSession() {
+  // Let an in-flight refresh finish before revoking its browser session.
+  await refreshingSession?.catch(() => {});
+  await axios.post("/api/auth/logout");
+}
+api.interceptors.response.use((response) => response, async (error) => {
+  const config = error.config;
+  if (error.response?.status !== 401 || !config || config._sessionRetry || ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].includes(config.url)) {
+    return Promise.reject(error);
+  }
+  config._sessionRetry = true;
+  try {
+    const data = await refreshSession();
+    config.headers.Authorization = `Bearer ${data.access_token}`;
+    return api.request(config);
+  } catch (refreshError: any) {
+    if (refreshError.response?.status === 401) {
+      sessionStorage.removeItem("token");
+      window.dispatchEvent(new Event("orencode:session-ended"));
+    }
+    return Promise.reject(refreshError);
+  }
 });
 export const errorText = (err: any) => {
   const d = err?.response?.data?.detail;
@@ -28,6 +72,7 @@ export const roleNames: Record<string, string> = {
   athlete: "Спортсмен",
   coach: "Тренер",
   judge: "Судья",
+  ministry: "Минспорт",
 };
 export const stateNames: Record<string, string> = {
   draft: "Черновик",
@@ -75,6 +120,10 @@ export const ranks = [
   "МС",
   "МСМК",
 ];
+export const fileSize = (n: number) =>
+  n < 1024 * 1024
+    ? Math.max(1, Math.round(n / 1024)) + " КБ"
+    : (n / 1024 / 1024).toFixed(1).replace(".", ",") + " МБ";
 export async function download(url: string, name: string) {
   const res = await api.get(url, { responseType: "blob" });
   const obj = URL.createObjectURL(res.data);

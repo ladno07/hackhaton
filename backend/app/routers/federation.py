@@ -392,6 +392,11 @@ def list_deadlines(
             Competition.state.in_(["open", "closed"]), Competition.end_date >= today
         )
     ):
+        if actor.role == "ministry":
+            if c.state == "open" and c.deadline >= today:
+                items.append({"kind": "competition", "id": c.id,
+                              "title": c.title, "due_on": c.deadline})
+            continue
         if actor.role == "judge":
             involved = bool(db.get(CompetitionJudge, (c.id, own(db, Judge, actor).id)))
         else:

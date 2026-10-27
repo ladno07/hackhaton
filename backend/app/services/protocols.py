@@ -20,7 +20,8 @@ def check_entries(results, approved):
         key = ("team", r.team_name) if r.team_name else ("athlete", r.athlete_id)
         if entries.setdefault(key, (r.place, r.score)) != (r.place, r.score):
             raise HTTPException(
-                422, f"У участников команды «{r.team_name}» должны совпадать место и баллы"
+                422,
+                f"У участников команды «{r.team_name}» должны совпадать место и баллы",
             )
     places = sorted(place for place, _ in entries.values())
     for i, place in enumerate(places):

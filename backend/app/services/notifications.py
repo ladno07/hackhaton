@@ -188,9 +188,15 @@ async def worker():
         await asyncio.sleep(60)
 
 
+# Public calendar events; personal and internal federation events stay hidden.
+MINISTRY_EVENTS = {"competition-open", "competition-regulation"}
+
+
 def visible_in_role(db, actor, notice):
     """Account ownership is checked by the router; this additionally scopes role-specific events."""
     parts = notice.event_key.split(":")
+    if actor.role == "ministry":
+        return parts[0] in MINISTRY_EVENTS or notice.event_key.startswith("deadline:comp:")
     if is_registration_notice(notice):
         if actor.role != "athlete" or parts[0] != "competition-open":
             return False
@@ -216,6 +222,12 @@ def visible_in_role(db, actor, notice):
 
     parts = notice.event_key.split(":")
     kind = parts[0]
+    if kind == "passport-consent":
+        return False
+    if kind == "passport-consent-decision":
+        return actor.role == "athlete"
+    if kind == "competition-team":
+        return actor.role in {"athlete", "coach"}
     if kind == "tg-reminder":
         if actor.role not in (notice.telegram_context or {}).get("roles", []):
             return False
