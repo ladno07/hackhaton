@@ -76,6 +76,7 @@ export const roleNames: Record<string, string> = {
   athlete: "Спортсмен",
   coach: "Тренер",
   judge: "Судья",
+  ministry: "Минспорт",
 };
 export const stateNames: Record<string, string> = {
   draft: "Черновик",

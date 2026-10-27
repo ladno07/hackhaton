@@ -1,4 +1,4 @@
-"""Both historical 0007 schemas and the deployed 0010 schema reach one head."""
+"""Historical organization/team/passport/ministry schemas reach the same head."""
 
 import os
 from pathlib import Path
@@ -12,7 +12,9 @@ from alembic.migration import MigrationContext
 from app.db import Base
 
 
-@pytest.mark.parametrize("source", ["0006", "0007", "0007_teams", "0010"])
+@pytest.mark.parametrize(
+    "source", ["0006", "0007", "0007_teams", "0008", "0008_passports", "0010", "0011"]
+)
 def test_merged_migration_upgrade(tmp_path, source):
     url = "sqlite:///" + (tmp_path / "migration.db").as_posix()
     env = {**os.environ, "DATABASE_URL": url}
@@ -91,17 +93,20 @@ def test_merged_migration_upgrade(tmp_path, source):
     engine.dispose()
     if source != "0006":
         upgrade(source)
-    if source == "0007_teams":
+    if source in {"0007_teams", "0008_passports"}:
         engine = create_engine(url)
         with engine.begin() as conn:
-            conn.execute(text("UPDATE alembic_version SET version_num = '0007'"))
+            conn.execute(
+                text("UPDATE alembic_version SET version_num = :legacy"),
+                {"legacy": "0007" if source == "0007_teams" else "0008"},
+            )
         engine.dispose()
     upgrade("head")
     engine = create_engine(url)
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalars().all() == ["0011"]
+        ).scalars().all() == ["0012"]
         tables = set(inspect(conn).get_table_names())
         assert {
             "athlete_organizations",

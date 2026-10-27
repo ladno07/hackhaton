@@ -225,7 +225,7 @@ def population_report(
     municipality: str = "",
     min_age: int = 0,
     max_age: int = 100,
-    actor: Actor = Depends(allow("admin")),
+    actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
     if not 1 <= end_year - start_year <= 30:
@@ -252,7 +252,7 @@ def export_population(
     municipality: str = "",
     min_age: int = 0,
     max_age: int = 100,
-    actor: Actor = Depends(allow("admin")),
+    actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
     if not 1 <= end_year - start_year <= 30:
@@ -424,7 +424,7 @@ def team_export(
     season: int = date.today().year,
     discipline_id: int | None = None,
     order: bool = False,
-    actor: Actor = Depends(allow("admin")),
+    actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
     query = select(TeamMember).where(TeamMember.season == season)

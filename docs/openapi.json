@@ -7649,7 +7649,8 @@
                 "admin",
                 "athlete",
                 "coach",
-                "judge"
+                "judge",
+                "ministry"
               ]
             },
             "type": "array",

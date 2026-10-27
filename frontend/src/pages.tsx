@@ -131,7 +131,7 @@ export function Overview() {
       (new Date().getFullYear() - 3) +
       "&end_year=" +
       new Date().getFullYear(),
-    role === "admin",
+    role === "admin" || role === "ministry",
   );
   const upcoming = (comps.data || [])
     .filter((c: any) => c.start_date >= today() && c.state !== "published")
@@ -199,7 +199,7 @@ export function Overview() {
             value={role === "judge" ? s?.assignments : s?.athletes}
             icon={Users}
             note={
-              role === "admin"
+              role === "admin" || role === "ministry"
                 ? "в едином реестре"
                 : "в пределах вашего кабинета"
             }
@@ -304,7 +304,7 @@ export function Overview() {
           </section>
         )}
       </div>
-      {role === "admin" ? (
+      {role === "admin" || role === "ministry" ? (
         <section className="panel growth-panel">
           <div className="panel-heading">
             <div>
@@ -404,9 +404,12 @@ export function Overview() {
 }
 
 export function History() {
+  const { role } = useAuth();
+  // Минспорт видит протоколы, но не персональные отчёты каждого спортсмена
+  const personal = role !== "ministry";
   const q = useData("/results");
   const toast = useToast();
-  const a = useData("/athletes?mine=true");
+  const a = useData("/athletes?mine=true", personal);
   const [search, setSearch] = useState("");
   return (
     <>
@@ -427,7 +430,7 @@ export function History() {
                 "Место",
                 "Баллы",
                 "Протокол",
-                "Справка об участии",
+                ...(personal ? ["Справка об участии"] : []),
               ]}
             >
               {q.data
@@ -460,6 +463,7 @@ export function History() {
                         name={"protocol-" + r.competition_id}
                       />
                     </td>
+                    {personal && (
                     <td>
                       {r.can_download_certificate ? (
                         <div className="row-actions">
@@ -490,6 +494,7 @@ export function History() {
                         <span>Недоступно по текущей связи</span>
                       )}
                     </td>
+                    )}
                   </tr>
                 ))}
             </Table>
@@ -501,20 +506,22 @@ export function History() {
           )}
         </State>
       </section>
-      <section className="panel section-gap">
-        <div className="panel-heading">
-          <h2>Отчёт о выступлениях спортсмена</h2>
-        </div>
-        {a.data?.map((x: any) => (
-          <div className="simple-row" key={x.id}>
-            <span>{x.full_name}</span>
-            <ExportButtons
-              base={"/exports/athlete/" + x.id}
-              name={"athlete-" + x.id}
-            />
+      {personal && (
+        <section className="panel section-gap">
+          <div className="panel-heading">
+            <h2>Отчёт о выступлениях спортсмена</h2>
           </div>
-        ))}
-      </section>
+          {a.data?.map((x: any) => (
+            <div className="simple-row" key={x.id}>
+              <span>{x.full_name}</span>
+              <ExportButtons
+                base={"/exports/athlete/" + x.id}
+                name={"athlete-" + x.id}
+              />
+            </div>
+          ))}
+        </section>
+      )}
     </>
   );
 }

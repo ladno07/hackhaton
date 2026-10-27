@@ -28,6 +28,18 @@ else:
                         "UPDATE alembic_version SET version_num = '0007_teams' WHERE version_num = '0007'"
                     )
                 )
+            if "alembic_version" in tables and "passport_publications" in tables:
+                versions = set(
+                    connection.execute(
+                        text("SELECT version_num FROM alembic_version")
+                    ).scalars()
+                )
+                if versions == {"0008"}:
+                    connection.execute(
+                        text(
+                            "UPDATE alembic_version SET version_num = '0008_passports' WHERE version_num = '0008'"
+                        )
+                    )
         context.configure(
             connection=connection, target_metadata=Base.metadata, compare_type=True
         )

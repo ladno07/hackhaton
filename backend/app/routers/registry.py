@@ -19,6 +19,19 @@ from app.services.ratings import rating_levels
 from app.services.athlete_ids import public_athlete_id
 
 router = APIRouter(tags=["Реестры и профили"])
+MINISTRY_FIELDS = [
+    "id",
+    "full_name",
+    "sex",
+    "age",
+    "municipality",
+    "organization",
+    "organization_id",
+    "training_stage",
+    "suspended_until",
+    "disciplines",
+    "ranks",
+]
 
 
 def athlete_view(db, athlete):
@@ -83,7 +96,7 @@ def athletes(
     max_age: int = 100,
     rank: str = "",
     mine: bool = False,
-    actor: Actor = Depends(allow("admin", "coach", "athlete")),
+    actor: Actor = Depends(allow("admin", "coach", "athlete", "ministry")),
     db: Session = Depends(get_db),
 ):
     ids = visible_athletes(db, actor) if mine or actor.role == "athlete" else None
@@ -126,6 +139,9 @@ def athletes(
                     "age",
                 ]
             }
+        # The ministry sees the registry for statistics: no documents or reasons.
+        if actor.role == "ministry":
+            item = {k: item[k] for k in MINISTRY_FIELDS}
         output.append(item)
     return output
 

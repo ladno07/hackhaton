@@ -599,18 +599,21 @@ def history(
     return [
         {
             **row(r),
-            "can_download_certificate": actor.role != "coach"
-            or db.scalar(
-                select(AthleteCoach.id)
-                .join(Coach, Coach.id == AthleteCoach.coach_id)
-                .where(
-                    Coach.user_id == actor.user.id,
-                    AthleteCoach.athlete_id == r.athlete_id,
-                    AthleteCoach.discipline_id == c.discipline_id,
-                    AthleteCoach.status == "active",
+            "can_download_certificate": actor.role in {"admin", "athlete"}
+            or (
+                actor.role == "coach"
+                and db.scalar(
+                    select(AthleteCoach.id)
+                    .join(Coach, Coach.id == AthleteCoach.coach_id)
+                    .where(
+                        Coach.user_id == actor.user.id,
+                        AthleteCoach.athlete_id == r.athlete_id,
+                        AthleteCoach.discipline_id == c.discipline_id,
+                        AthleteCoach.status == "active",
+                    )
                 )
-            )
-            is not None,
+                is not None
+            ),
             "full_name": db.get(Athlete, r.athlete_id).user.full_name,
             "title": c.title,
             "start_date": c.start_date,

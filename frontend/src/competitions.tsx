@@ -1052,7 +1052,9 @@ export function CompetitionDetail() {
                   ...(comp.entry_mode === "team" ? [["teams", "Команды"]] : []),
                   [
                     "applications",
-                    role === "admin" ? "Заявки участников" : "Мои заявки",
+                    role === "admin" || role === "ministry"
+                      ? "Заявки участников"
+                      : "Мои заявки",
                   ],
                   ["results", "Результаты и протокол"],
                   ["judges", "Судейская коллегия"],
