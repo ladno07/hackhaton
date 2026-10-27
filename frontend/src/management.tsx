@@ -29,6 +29,7 @@ import {
 import { useAction, useAuth, useData } from "./state";
 import {
   ageRange,
+  chartColors,
   ageRules,
   date,
   levels,
@@ -1230,7 +1231,7 @@ export function Reports() {
                 <Bar
                   name="Спортсменов"
                   dataKey="count"
-                  fill="#bb2e40"
+                  fill={chartColors.primary}
                   radius={[5, 5, 0, 0]}
                   maxBarSize={80}
                 />

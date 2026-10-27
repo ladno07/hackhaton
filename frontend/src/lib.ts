@@ -2,6 +2,11 @@ import axios from "axios";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
+// Цвета графиков: recharts пишет их в SVG-атрибуты, где var() не работает
+export const chartColors = {
+  primary: "#402fff",
+  grid: "#ededed",
+};
 export const api = axios.create({ baseURL: "/api" });
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem("token");

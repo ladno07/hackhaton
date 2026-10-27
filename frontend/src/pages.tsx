@@ -25,7 +25,14 @@ import {
   YAxis,
 } from "recharts";
 import { useAction, useAuth, useData } from "./state";
-import { date, formats, roleNames, sexNames, today } from "./lib";
+import {
+  chartColors,
+  date,
+  formats,
+  roleNames,
+  sexNames,
+  today,
+} from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
@@ -249,15 +256,15 @@ export function Overview() {
                     margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
                   >
                     <defs>
-                      <linearGradient id="redArea" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="primaryArea" x1="0" y1="0" x2="0" y2="1">
                         <stop
                           offset="0%"
-                          stopColor="#bd2d3c"
+                          stopColor={chartColors.primary}
                           stopOpacity={0.2}
                         />
                         <stop
                           offset="100%"
-                          stopColor="#bd2d3c"
+                          stopColor={chartColors.primary}
                           stopOpacity={0}
                         />
                       </linearGradient>
@@ -265,7 +272,7 @@ export function Overview() {
                     <CartesianGrid
                       strokeDasharray="4 5"
                       vertical={false}
-                      stroke="#e9ebef"
+                      stroke={chartColors.grid}
                     />
                     <XAxis dataKey="year" tickLine={false} axisLine={false} />
                     <YAxis
@@ -277,9 +284,9 @@ export function Overview() {
                     <Area
                       dataKey="count"
                       name="Спортсменов"
-                      stroke="#bb2e40"
+                      stroke={chartColors.primary}
                       strokeWidth={3}
-                      fill="url(#redArea)"
+                      fill="url(#primaryArea)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>

@@ -16,7 +16,6 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   ChevronDown,
-  Code2,
   FileCheck2,
   FileText,
   Gavel,
@@ -34,6 +33,7 @@ import { api, errorText, roleNames, sexNames } from "./lib";
 import { useAuth, useData, useToast } from "./state";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
+import { FspLogo } from "./components/logo";
 import {
   Overview,
   History,
@@ -82,13 +82,7 @@ function Login() {
     <div className="auth-page">
       <section className="auth-story">
         <Link to="/" className="brand">
-          <span className="brand-icon">
-            <Code2 />
-          </span>
-          <span>
-            орен<span className="brand-red">код</span>
-            <small>ФЕДЕРАЦИЯ СПОРТИВНОГО ПРОГРАММИРОВАНИЯ</small>
-          </span>
+          <FspLogo className="brand-logo" />
         </Link>
         <div>
           <div className="eyebrow">ОРЕНБУРГСКАЯ ОБЛАСТЬ · 2026</div>
@@ -365,13 +359,7 @@ function Layout() {
       )}
       <aside className={"sidebar " + (mobile ? "sidebar-visible" : "")}>
         <Link className="brand" to="/">
-          <span className="brand-icon">
-            <Code2 />
-          </span>
-          <span>
-            орен<span className="brand-red">код</span>
-            <small>ЦИФРОВАЯ ПЛАТФОРМА ФСП</small>
-          </span>
+          <FspLogo className="brand-logo" />
         </Link>
         <div className="region-label">
           Оренбургская область <span>2026</span>
@@ -394,7 +382,7 @@ function Layout() {
         </nav>
         <div className="sidebar-bottom">
           <div className="federation-mark">
-            <Code2 size={24} />
+            <FspLogo variant="mark" className="federation-logo" />
             <div>
               Федерация спортивного
               <br />
