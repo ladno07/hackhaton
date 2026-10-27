@@ -25,14 +25,7 @@ import {
   YAxis,
 } from "recharts";
 import { useAction, useAuth, useData } from "./state";
-import {
-  chartColors,
-  date,
-  formats,
-  roleNames,
-  sexNames,
-  today,
-} from "./lib";
+import { chartColors, date, formats, roleNames, sexNames, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
@@ -256,7 +249,13 @@ export function Overview() {
                     margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
                   >
                     <defs>
-                      <linearGradient id="primaryArea" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient
+                        id="primaryArea"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
                         <stop
                           offset="0%"
                           stopColor={chartColors.primary}
@@ -405,6 +404,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
     full_name: athlete.full_name,
     sex: athlete.sex || "",
     organization_id: athlete.organization_id,
+    organization_since: today(),
     municipality: athlete.municipality,
     training_stage: athlete.training_stage || "",
     rusada_date: athlete.rusada_date || null,
@@ -412,6 +412,9 @@ export function ProfileEditor({ athlete, onSaved }: any) {
     disciplines: athlete.disciplines || [],
   });
   const change = (k: string, val: any) => setV({ ...v, [k]: val });
+  const moved =
+    (v.organization_id || null) !== (athlete.organization_id || null);
+  const history = athlete.organization_history || [];
   return (
     <form
       onSubmit={async (e) => {
@@ -422,6 +425,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             url: "/athletes/" + athlete.id,
             data: {
               ...v,
+              organization_since: moved ? v.organization_since : null,
               sex: v.sex || null,
               disciplines: v.disciplines.map(
                 ({ discipline_id, start_year, end_year }: any) => ({
@@ -483,6 +487,34 @@ export function ProfileEditor({ athlete, onSaved }: any) {
           </select>
         </Field>
       </div>
+      {moved && (
+        <Field
+          label="Дата перехода"
+          hint="С этой даты спортсмен учитывается в новой организации"
+        >
+          <input
+            type="date"
+            required
+            max={today()}
+            value={v.organization_since}
+            onChange={(e) => change("organization_since", e.target.value)}
+          />
+        </Field>
+      )}
+      {history.length > 0 && (
+        <div className="form-section">
+          <h3>История организаций</h3>
+          {history.map((p: any) => (
+            <div className="simple-row" key={p.id}>
+              <span>{p.organization}</span>
+              <small>
+                {date(p.start_date)} —{" "}
+                {p.end_date ? date(p.end_date) : "по н. в."}
+              </small>
+            </div>
+          ))}
+        </div>
+      )}
       <Field label="Этап подготовки">
         <input
           value={v.training_stage}
@@ -733,11 +765,14 @@ export function Coaching() {
                   </td>
                   <td>
                     <div className="row-actions">
-                      {["coach", "admin"].includes(role) && l.status === "active" && (
-                        <Button size="sm" variant="outline" asChild>
-                          <Link to={`/coaching/athletes/${l.athlete_id}`}>Сводка выступлений</Link>
-                        </Button>
-                      )}
+                      {["coach", "admin"].includes(role) &&
+                        l.status === "active" && (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={`/coaching/athletes/${l.athlete_id}`}>
+                              Сводка выступлений
+                            </Link>
+                          </Button>
+                        )}
                       {role === "athlete" &&
                         ["pending", "paused"].includes(l.status) && (
                           <Button

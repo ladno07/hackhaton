@@ -92,6 +92,18 @@ class AthleteDiscipline(Base):
     end_year: Mapped[int | None] = mapped_column(Integer)
 
 
+class AthleteOrganization(Base):
+    """Membership period; end_date is inclusive, NULL means the current one."""
+
+    __tablename__ = "athlete_organizations"
+    __table_args__ = (CheckConstraint("end_date IS NULL OR end_date >= start_date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+
+
 class StaffCard:
     """Card of a coach or a judge; an archived card keeps its history."""
 

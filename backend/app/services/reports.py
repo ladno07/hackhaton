@@ -37,27 +37,41 @@ def population(
     max_age=100,
 ):
     counts = defaultdict(set)
+    history = defaultdict(list)
+    for period in db.scalars(select(AthleteOrganization)):
+        history[period.athlete_id].append(period)
+
+    def organization_in(athlete_id, year):
+        # The latest period touching the year: a transfer moves the athlete
+        # to the new organization for the whole year of the transfer.
+        periods = [
+            p
+            for p in history[athlete_id]
+            if p.start_date.year <= year
+            and (p.end_date is None or p.end_date.year >= year)
+        ]
+        if not periods:
+            return None
+        return max(periods, key=lambda p: p.start_date).organization_id
+
     for enrollment, athlete in db.execute(
         select(AthleteDiscipline, Athlete).join(
             Athlete, Athlete.id == AthleteDiscipline.athlete_id
         )
     ):
         if (
-            organization_id
-            and athlete.organization_id != organization_id
-            or discipline_id
+            discipline_id
             and enrollment.discipline_id != discipline_id
             or municipality.lower() not in athlete.municipality.lower()
         ):
             continue
-        org = (
-            db.get(Organization, athlete.organization_id)
-            if athlete.organization_id
-            else None
-        )
         for year in range(start_year, end_year + 1):
             if not enrollment.start_year <= year <= (enrollment.end_year or end_year):
                 continue
+            org_id = organization_in(athlete.id, year)
+            if organization_id and org_id != organization_id:
+                continue
+            org = db.get(Organization, org_id) if org_id else None
             age = age_at(athlete.user.birth_date, date(year, 12, 31))
             if not min_age <= age <= max_age:
                 continue
@@ -92,7 +106,7 @@ def population(
             "Муниципалитет",
             "Численность",
         ],
-        "source": "Годы начала и окончания занятий из реестра. Возраст на 31 декабря; в итогах спортсмен считается один раз.",
+        "source": "Годы начала и окончания занятий из реестра; организация — по истории переходов (в год перехода — новая). Возраст на 31 декабря; в итогах спортсмен считается один раз.",
     }
 
 

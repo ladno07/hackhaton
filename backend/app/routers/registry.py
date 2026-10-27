@@ -46,6 +46,10 @@ def athlete_view(db, athlete):
             )
         ],
         "ranks": [row(r) for r in ranks],
+        "organization_history": [
+            {**row(p), "organization": db.get(Organization, p.organization_id).name}
+            for p in memberships(db, athlete.id)
+        ],
     }
 
 
@@ -150,8 +154,17 @@ def update_profile(
     athlete.user.full_name = data.full_name
     if "sex" in data.model_fields_set:
         athlete.user.sex = data.sex
+    transfer(db, athlete, data.organization_id, data.organization_since)
     for key, value in data.model_dump(
-        mode="json", exclude={"full_name", "sex", "disciplines", "rusada_date"}
+        mode="json",
+        exclude={
+            "full_name",
+            "sex",
+            "disciplines",
+            "rusada_date",
+            "organization_id",
+            "organization_since",
+        },
     ).items():
         setattr(athlete, key, value)
     athlete.rusada_date = data.rusada_date
