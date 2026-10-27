@@ -182,6 +182,13 @@ def update_profile(
         raise HTTPException(422, "Дисциплина указана дважды")
     for d in data.disciplines:
         require(db, Discipline, d.discipline_id)
+    # the stage follows attestation: the athlete cannot move themselves up
+    if actor.role == "athlete" and (data.training_stage or None) != (
+        athlete.training_stage or None
+    ):
+        raise HTTPException(
+            403, "Этап подготовки меняет федерация по результатам аттестации"
+        )
     athlete.user.full_name = data.full_name
     if "sex" in data.model_fields_set:
         athlete.user.sex = data.sex

@@ -3446,3 +3446,99 @@ td a:hover {
 .appeal-row td {
   background: var(--fsp-primary-50);
 }
+/* training standards and attestation */
+.standard-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 110px;
+}
+.standard-progress span {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fsp-neutral-100);
+  overflow: hidden;
+}
+.standard-progress i {
+  display: block;
+  height: 100%;
+  background: var(--fsp-primary-500);
+}
+.standard-progress small {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stage-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.standard-value,
+.standard-threshold {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.standard-expired td {
+  color: var(--fsp-neutral-400);
+}
+.standard-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 24px 24px;
+}
+.dialog .standard-card {
+  padding: 0;
+}
+.standard-card h3 {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+.standard-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.standard-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--fsp-neutral-100);
+  border-radius: 10px;
+}
+.standard-summary small,
+.standard-summary span {
+  font-size: 12px;
+  color: var(--fsp-neutral-500);
+}
+.standard-summary strong {
+  font-size: 15px;
+}
+.standard-blockers {
+  margin: 0;
+  padding: 12px 14px 12px 32px;
+  border-radius: 10px;
+  background: var(--fsp-warning-50);
+  color: var(--fsp-warning-700);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.standard-record {
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--fsp-neutral-50);
+}
+.standard-record h3 {
+  margin: 0 0 12px;
+}
+.standard-transfers .simple-row b {
+  font-weight: 600;
+}
+.standard-toolbar > .field,
+.standard-toolbar > .field:first-child {
+  flex: 0 1 220px;
+  max-width: 220px;
+}

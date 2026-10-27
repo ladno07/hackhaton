@@ -94,6 +94,8 @@ def notice_path(db, notice):
             return f"/competitions/{app.competition_id}"
     if parts[0].startswith(("appeal", "violation")):
         return "/appeals"
+    if parts[0].startswith("stage-"):
+        return "/standards"
     return "/ranks" if parts[0].startswith("rank-") else "/notifications"
 
 

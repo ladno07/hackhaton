@@ -777,3 +777,70 @@ class Appeal(Base):
     # protocol version created by the decision
     resolution_version: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class TrainingStandard(Base):
+    """Norm of general (ofp) or special (sfp) physical training for enrolment
+    and transfer to a training stage; NULL sex or discipline means any."""
+
+    __tablename__ = "training_standards"
+    __table_args__ = (
+        CheckConstraint("stage IN ('np','ut','ssm','vsm')", name="ck_standard_stage"),
+        CheckConstraint("category IN ('ofp','sfp')", name="ck_standard_category"),
+        CheckConstraint("better IN ('higher','lower')", name="ck_standard_better"),
+        CheckConstraint(
+            "sex IS NULL OR sex IN ('male','female')", name="ck_standard_sex"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stage: Mapped[str] = mapped_column(String(10), index=True)
+    category: Mapped[str] = mapped_column(String(10))
+    name: Mapped[str] = mapped_column(String(200))
+    unit: Mapped[str] = mapped_column(String(40))
+    # higher: the result must be at least the threshold; lower: at most
+    better: Mapped[str] = mapped_column(String(10))
+    threshold: Mapped[float] = mapped_column(Float)
+    sex: Mapped[str | None] = mapped_column(String(10))
+    discipline_id: Mapped[int | None] = mapped_column(ForeignKey("disciplines.id"))
+    source: Mapped[str] = mapped_column(Text, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class StandardResult(Base):
+    """Attempt at a standard; threshold and verdict are fixed on the test date,
+    readiness compares against the current threshold."""
+
+    __tablename__ = "standard_results"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    standard_id: Mapped[int] = mapped_column(ForeignKey("training_standards.id"))
+    value: Mapped[float] = mapped_column(Float)
+    tested_on: Mapped[date] = mapped_column(Date)
+    threshold: Mapped[float] = mapped_column(Float)
+    passed: Mapped[bool] = mapped_column(Boolean)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    recorded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    recorded_role: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class StageTransfer(Base):
+    """Enrolment or transfer to a training stage; basis keeps the standards
+    and the rank the decision relied on."""
+
+    __tablename__ = "stage_transfers"
+    __table_args__ = (
+        CheckConstraint("to_stage IN ('np','ut','ssm','vsm')", name="ck_transfer_stage"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    # training_stage as it was: free text entered before the catalog is kept
+    from_stage: Mapped[str | None] = mapped_column(String(120))
+    to_stage: Mapped[str] = mapped_column(String(10))
+    decided_on: Mapped[date] = mapped_column(Date)
+    order_number: Mapped[str] = mapped_column(String(120))
+    basis: Mapped[dict] = mapped_column(JSON)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

@@ -237,7 +237,7 @@ def visible_in_role(db, actor, notice):
         if parts[0] == "tg-reminder":
             return parts[1] in {"report", "governor"}
         return parts[0] not in {"application-decision", "rank-decision", "judge", "protocol",
-                                 "appeal-decision", "violation", "violation-cancel",
+                                 "appeal-decision", "violation", "violation-cancel", "stage-transfer",
                                  "competition-schedule", "competition-regulation", "link", "link-change"}
     from app.services.common import visible_athletes, own
 
@@ -308,6 +308,10 @@ def visible_in_role(db, actor, notice):
     if kind in {"violation", "violation-cancel"}:
         violation = db.get(Violation, int(parts[1]))
         return bool(violation and follows(violation.athlete_id, None))
+    if kind in {"stage-ready", "stage-transfer"}:
+        transfer = db.get(StageTransfer, int(parts[1])) if kind == "stage-transfer" else None
+        athlete_id = transfer.athlete_id if transfer else int(parts[1])
+        return bool((transfer or kind == "stage-ready") and follows(athlete_id, None))
     if kind == "deadline":
         if parts[1] == "end":
             comp = db.get(Competition, int(parts[2]))
