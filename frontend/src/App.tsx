@@ -30,7 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { api, errorText, roleNames } from "./lib";
+import { api, errorText, roleNames, sexNames } from "./lib";
 import { useAuth, useData, useToast } from "./state";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
@@ -65,7 +65,11 @@ function Login() {
         await api.post(
           "/auth/" + (register ? "register" : "login"),
           register
-            ? { ...form, guardian_name: form.guardian_name || null }
+            ? {
+                ...form,
+                sex: form.role === "athlete" ? form.sex || null : null,
+                guardian_name: form.guardian_name || null,
+              }
             : { email: form.email, password: form.password },
         )
       ).data;
@@ -160,6 +164,21 @@ function Login() {
                     </select>
                   </Field>
                 </div>
+                {form.role === "athlete" && (
+                  <Field label="Пол">
+                    <select
+                      value={form.sex || ""}
+                      onChange={(e) => change("sex", e.target.value)}
+                    >
+                      <option value="">Не указан</option>
+                      {Object.entries(sexNames).map(([k, s]) => (
+                        <option value={k} key={k}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
               </>
             )}
             <Field label="Электронная почта">

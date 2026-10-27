@@ -23,11 +23,13 @@ def now():
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (CheckConstraint("sex IS NULL OR sex IN ('male','female')"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(Text)
     full_name: Mapped[str] = mapped_column(String(200))
     birth_date: Mapped[date] = mapped_column(Date)
+    sex: Mapped[str | None] = mapped_column(String(10))
     consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     consent_version: Mapped[str] = mapped_column(String(30), default="2026-01")
     guardian_name: Mapped[str | None] = mapped_column(String(200))
@@ -164,6 +166,36 @@ class Competition(Base):
     revision: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class AgeGroup(Base):
+    """Age group from the sport's rules; discipline_id NULL means all disciplines."""
+
+    __tablename__ = "age_groups"
+    __table_args__ = (
+        CheckConstraint("min_age <= max_age"),
+        CheckConstraint("sex IS NULL OR sex IN ('male','female')"),
+        CheckConstraint("age_rule IN ('year','start')"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    discipline_id: Mapped[int | None] = mapped_column(ForeignKey("disciplines.id"))
+    sex: Mapped[str | None] = mapped_column(String(10))
+    min_age: Mapped[int] = mapped_column(Integer)
+    max_age: Mapped[int] = mapped_column(Integer)
+    # year: age reached in the calendar year of the start; start: age on start date
+    age_rule: Mapped[str] = mapped_column(String(10), default="year")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CompetitionAgeGroup(Base):
+    __tablename__ = "competition_age_groups"
+    competition_id: Mapped[int] = mapped_column(
+        ForeignKey("competitions.id", ondelete="CASCADE"), primary_key=True
+    )
+    age_group_id: Mapped[int] = mapped_column(
+        ForeignKey("age_groups.id"), primary_key=True
+    )
+
+
 class CompetitionRegulation(Base):
     __tablename__ = "competition_regulations"
     competition_id: Mapped[int] = mapped_column(
@@ -188,6 +220,7 @@ class CompetitionApplication(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"))
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    age_group_id: Mapped[int | None] = mapped_column(ForeignKey("age_groups.id"))
     submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(20), default="pending")
     comment: Mapped[str | None] = mapped_column(Text)

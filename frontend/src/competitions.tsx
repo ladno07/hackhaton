@@ -22,7 +22,18 @@ import {
   X,
 } from "lucide-react";
 import { useAction, useAuth, useData, useToast } from "./state";
-import { date, download, errorText, formats, levels, today } from "./lib";
+import {
+  ageHint,
+  ageLimits,
+  ageRules,
+  date,
+  download,
+  errorText,
+  formats,
+  groupLabel,
+  levels,
+  today,
+} from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -146,6 +157,22 @@ export function Regulation({ comp }: any) {
     </div>
   );
 }
+export function AgeHint({ check, self }: any) {
+  const hint = ageHint(check, self);
+  if (!hint) return null;
+  return (
+    <div className={"age-hint" + (hint.ok ? "" : " age-hint-no")} role="status">
+      <strong>{hint.title}</strong>
+      {hint.text}
+      {self && check.reason === "sex_missing" && (
+        <>
+          {" "}
+          <Link to="/profile">Заполнить профиль</Link>
+        </>
+      )}
+    </div>
+  );
+}
 export function CompetitionForm({ initial, onSaved }: any) {
   const meta = useData("/metadata");
   const action = useAction();
@@ -168,7 +195,14 @@ export function CompetitionForm({ initial, onSaved }: any) {
             "calendar_plan",
             "calendar_number",
             "regulation_url",
-          ].map((k) => [k, initial[k]]),
+          ]
+            .map((k) => [k, initial[k]])
+            .concat([
+              [
+                "age_group_ids",
+                (initial.age_groups || []).map((g: any) => g.id),
+              ],
+            ]),
         )
       : {
           title: "",
@@ -182,12 +216,17 @@ export function CompetitionForm({ initial, onSaved }: any) {
           level: "regional",
           min_age: 0,
           max_age: 100,
+          age_group_ids: [],
           calendar_plan: "Оренбургская область",
           calendar_number: "",
           regulation_url: null,
         },
   );
   const set = (k: string, val: any) => setV({ ...v, [k]: val });
+  const groups = (meta.data?.age_groups || []).filter(
+    (g: any) => !g.discipline_id || g.discipline_id === v.discipline_id,
+  );
+  const picked = groups.filter((g: any) => v.age_group_ids.includes(g.id));
   const field = (k: string, label: string, type = "text", props: any = {}) => (
     <Field label={label}>
       <input
@@ -209,7 +248,12 @@ export function CompetitionForm({ initial, onSaved }: any) {
           const saved = await action.mutateAsync({
             method: initial ? "put" : "post",
             url: "/competitions" + (initial ? "/" + initial.id : ""),
-            data: { ...v, regulation_url: v.regulation_url || null },
+            data: {
+              ...v,
+              // groups of another discipline are dropped when it changes
+              age_group_ids: picked.map((g: any) => g.id),
+              regulation_url: v.regulation_url || null,
+            },
           });
           if (file)
             await action.mutateAsync({
@@ -291,16 +335,45 @@ export function CompetitionForm({ initial, onSaved }: any) {
           </select>
         </Field>
       </div>
-      <div className="form-grid">
-        {field("min_age", "Минимальный возраст", "number", {
-          min: 0,
-          max: 100,
-        })}
-        {field("max_age", "Максимальный возраст", "number", {
-          min: 0,
-          max: 100,
-        })}
+      <div className="field" role="group" aria-labelledby="age-groups-label">
+        <span id="age-groups-label">Возрастные группы</span>
+        <div className="group-picker">
+          {groups.map((g: any) => (
+            <label className="check-line" key={g.id}>
+              <input
+                type="checkbox"
+                checked={v.age_group_ids.includes(g.id)}
+                onChange={(e) =>
+                  set(
+                    "age_group_ids",
+                    e.target.checked
+                      ? [...v.age_group_ids, g.id]
+                      : v.age_group_ids.filter((x: number) => x !== g.id),
+                  )
+                }
+              />
+              <span title={ageRules[g.age_rule]}>{groupLabel(g)}</span>
+            </label>
+          ))}
+        </div>
+        <small>
+          {picked.length
+            ? "Допуск определяется группами, общий диапазон рассчитается автоматически"
+            : "Группы не выбраны: допуск по диапазону возраста на дату старта"}
+        </small>
       </div>
+      {!picked.length && (
+        <div className="form-grid">
+          {field("min_age", "Минимальный возраст", "number", {
+            min: 0,
+            max: 100,
+          })}
+          {field("max_age", "Максимальный возраст", "number", {
+            min: 0,
+            max: 100,
+          })}
+        </div>
+      )}
       <div className="form-grid">
         {field("calendar_plan", "Календарный план", "text", { readOnly: true })}
         {field("calendar_number", "Номер в календарном плане")}
@@ -452,8 +525,19 @@ export function Competitions() {
                       </span>
                       <span>
                         <Users size={14} />
-                        {c.min_age}–{c.max_age} лет
+                        {ageLimits(c)}
                       </span>
+                      {c.age_check && (
+                        <span
+                          className={
+                            c.eligible ? "text-success" : "text-danger"
+                          }
+                        >
+                          {c.eligible
+                            ? "Вы проходите по возрасту"
+                            : "Не проходите по возрасту"}
+                        </span>
+                      )}
                       <span>{formats[c.format]}</span>
                     </div>
                   </div>
@@ -587,6 +671,10 @@ export function CompetitionDetail() {
   const [judge, setJudge] = useState("");
   const [position, setPosition] = useState("Главный судья");
   const comp = query.data;
+  const eligibility = useData(
+    `/competitions/${id}/eligibility?athlete_id=${athlete}`,
+    role === "coach" && !!athlete,
+  );
   const [comments, setComments] = useState<Record<string, string>>({});
   return (
     <>
@@ -663,10 +751,23 @@ export function CompetitionDetail() {
                   <strong>{levels[comp.level]}</strong>
                 </div>
                 <div>
-                  <span>Возраст на дату старта</span>
+                  <span>
+                    {comp.age_groups.length
+                      ? "Возрастные группы"
+                      : "Возраст на дату старта"}
+                  </span>
                   <strong>
-                    {comp.min_age}–{comp.max_age} лет
+                    {comp.age_groups.length
+                      ? comp.age_groups.map((g: any) => (
+                          <span key={g.id} className="block">
+                            {groupLabel(g)}
+                          </span>
+                        ))
+                      : ageLimits(comp)}
                   </strong>
+                  {comp.age_groups.some((g: any) => g.age_rule === "year") && (
+                    <small>Возраст считается по году рождения</small>
+                  )}
                 </div>
                 <div>
                   <span>Приём заявок до</span>
@@ -705,6 +806,12 @@ export function CompetitionDetail() {
                     Федерация рассмотрит заявку и сообщит решение в личном
                     кабинете.
                   </p>
+                  {role === "athlete" && (
+                    <AgeHint check={comp.age_check} self />
+                  )}
+                  {role === "coach" && eligibility.data && (
+                    <AgeHint check={eligibility.data} />
+                  )}
                   {role === "coach" && (
                     <Field label="Спортсмен">
                       <select
@@ -726,6 +833,7 @@ export function CompetitionDetail() {
                       action.isPending ||
                       comp.state !== "open" ||
                       comp.eligible === false ||
+                      (role === "coach" && eligibility.data?.eligible === false) ||
                       comp.deadline < today() ||
                       (role === "athlete" &&
                         comp.applications.some(
@@ -738,11 +846,13 @@ export function CompetitionDetail() {
                       (a: any) => a.athlete_id === user.athlete_id,
                     )
                       ? "Заявка уже подана"
-                      : comp.eligible === false
-                        ? "Не подходит по возрасту"
-                        : comp.state === "open"
-                          ? "Подать заявку"
-                          : "Приём завершён"}
+                      : comp.age_check?.reason === "sex_missing"
+                        ? "Укажите пол в профиле"
+                        : comp.eligible === false
+                          ? "Не подходит по возрасту"
+                          : comp.state === "open"
+                            ? "Подать заявку"
+                            : "Приём завершён"}
                   </Button>
                 </form>
               )}
@@ -769,13 +879,20 @@ export function CompetitionDetail() {
               {tab === "applications" &&
                 (comp.applications.length ? (
                   <Table
-                    heads={["Спортсмен", "Дата заявки", "Статус", "Решение"]}
+                    heads={[
+                      "Спортсмен",
+                      "Группа",
+                      "Дата заявки",
+                      "Статус",
+                      "Решение",
+                    ]}
                   >
                     {comp.applications.map((a: any) => (
                       <tr key={a.id}>
                         <td>
                           <strong>{a.full_name}</strong>
                         </td>
+                        <td>{a.age_group || "—"}</td>
                         <td>{date(a.created_at)}</td>
                         <td>
                           <Badge value={a.status} />

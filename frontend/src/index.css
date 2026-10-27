@@ -178,6 +178,9 @@ details small {
 .text-danger {
   color: #b32739;
 }
+.text-success {
+  color: #2c7a55;
+}
 .eyebrow {
   font-size: 10px;
   font-weight: 700;
@@ -2481,4 +2484,35 @@ td a:hover {
 }
 .regulation-upload input {
   display: none;
+}
+.age-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  border-radius: 7px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid #cfe9db;
+  background: #f1faf5;
+  color: #2c6b4a;
+}
+.age-hint strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.age-hint.age-hint-no {
+  border-color: #f3d3d8;
+  background: #fff2f4;
+  color: #ab283c;
+}
+.age-hint a {
+  text-decoration: underline;
+}
+.group-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.group-picker input[type="checkbox"] {
+  width: auto;
 }

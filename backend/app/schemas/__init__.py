@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_vali
 
 RoleName = Literal["admin", "athlete", "coach", "judge"]
 Level = Literal["regional", "interregional", "russian_championship", "russian_junior"]
+Sex = Literal["male", "female"]
 
 
 class Strict(BaseModel):
@@ -15,6 +16,7 @@ class Register(Strict):
     password: str = Field(min_length=10, max_length=128)
     full_name: str = Field(min_length=3, max_length=200)
     birth_date: date
+    sex: Sex | None = None
     role: Literal["athlete", "coach", "judge"] = "athlete"
     consent: bool
     guardian_name: str | None = Field(None, max_length=200)
@@ -56,6 +58,7 @@ class CompetitionIn(Strict):
     level: Level
     min_age: int = Field(0, ge=0, le=100)
     max_age: int = Field(100, ge=0, le=100)
+    age_group_ids: list[int] = Field(default_factory=list, max_length=20)
     calendar_plan: str = Field(min_length=2, max_length=100)
     calendar_number: str = Field(min_length=1, max_length=80)
     regulation_url: HttpUrl | None = None
@@ -71,6 +74,22 @@ class CompetitionIn(Strict):
         expected = "Оренбургская область" if self.level == "regional" else "ЕКП"
         if self.calendar_plan != expected:
             raise ValueError(f"Для выбранного уровня календарный план: {expected}")
+        return self
+
+
+class AgeGroupIn(Strict):
+    name: str = Field(min_length=2, max_length=100)
+    discipline_id: int | None = None
+    sex: Sex | None = None
+    min_age: int = Field(ge=0, le=100)
+    max_age: int = Field(ge=0, le=100)
+    age_rule: Literal["year", "start"] = "year"
+    sort_order: int = Field(0, ge=0, le=1000)
+
+    @model_validator(mode="after")
+    def ages(self):
+        if self.min_age > self.max_age:
+            raise ValueError("Минимальный возраст больше максимального")
         return self
 
 
@@ -127,6 +146,7 @@ class Enrollment(Strict):
 
 class ProfileIn(Strict):
     full_name: str = Field(min_length=3, max_length=200)
+    sex: Sex | None = None
     organization_id: int | None = None
     municipality: str = Field(min_length=2, max_length=120)
     training_stage: str | None = Field(None, max_length=120)

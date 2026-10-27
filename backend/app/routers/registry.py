@@ -33,6 +33,7 @@ def athlete_view(db, athlete):
     return {
         **row(athlete),
         "full_name": athlete.user.full_name,
+        "sex": athlete.user.sex,
         "age": age_at(athlete.user.birth_date),
         "organization": org.name if org else "Без организации",
         "disciplines": [
@@ -55,6 +56,12 @@ def metadata(actor: Actor = Depends(current_actor), db: Session = Depends(get_db
         ],
         "types": [row(x) for x in db.scalars(select(CompetitionType))],
         "organizations": [row(x) for x in db.scalars(select(Organization))],
+        "age_groups": [
+            row(x)
+            for x in db.scalars(
+                select(AgeGroup).order_by(AgeGroup.sort_order, AgeGroup.id)
+            )
+        ],
     }
 
 
@@ -139,8 +146,10 @@ def update_profile(
     for d in data.disciplines:
         require(db, Discipline, d.discipline_id)
     athlete.user.full_name = data.full_name
+    if "sex" in data.model_fields_set:
+        athlete.user.sex = data.sex
     for key, value in data.model_dump(
-        mode="json", exclude={"full_name", "disciplines", "rusada_date"}
+        mode="json", exclude={"full_name", "sex", "disciplines", "rusada_date"}
     ).items():
         setattr(athlete, key, value)
     athlete.rusada_date = data.rusada_date

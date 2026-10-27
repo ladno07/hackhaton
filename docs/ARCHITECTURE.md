@@ -6,7 +6,7 @@
 
 `organizations → athletes/coaches`. `athlete_disciplines` задаёт дисциплины и годы занятий. `athlete_coaches` связывает спортсмена, тренера и дисциплину; `link_history` хранит переходы статуса с автором и временем.
 
-`competitions → disciplines / competition_types`; в соревновании хранятся даты, возраст, формат, уровень, календарный план и номер, ссылка на положение. Файл положения хранится отдельно в `competition_regulations` (bytea, одна запись на соревнование, проверка расширения и сигнатуры, до 10 МБ); `PUT/DELETE/GET /api/competitions/{id}/regulation`. `competition_applications` уникальна по соревнованию и спортсмену. `competition_judges` хранит должности. `competition_results` уникальна по спортсмену/соревнованию и месту/соревнованию.
+`competitions → disciplines / competition_types`; в соревновании хранятся даты, возраст, формат, уровень, календарный план и номер, ссылка на положение. Файл положения хранится отдельно в `competition_regulations` (bytea, одна запись на соревнование, проверка расширения и сигнатуры, до 10 МБ); `PUT/DELETE/GET /api/competitions/{id}/regulation`. Справочник `age_groups` (название, пол, возраст от/до, правило подсчёта: по году рождения или на дату старта, дисциплина или все) привязывается к соревнованию через `competition_age_groups`; если группы выбраны, допуск определяется ими, а `min_age/max_age` рассчитываются как общий диапазон. Пол хранится в `users.sex`. `competition_applications` уникальна по соревнованию и спортсмену и запоминает группу заявки (`age_group_id`). `competition_judges` хранит должности. `competition_results` уникальна по спортсмену/соревнованию и месту/соревнованию.
 
 `rank_applications` относится либо к спортсмену и его результату, либо к судье. Решение с приказом создаёт `sports_ranks` или `judge_categories`; история присвоений сохраняется. `evsk_rules` задаёт только предварительные условия подсветки с источником.
 
@@ -31,6 +31,8 @@
 | POST/PUT `/organizations[/{id}]` | Федерация |
 | GET/POST `/links`; PATCH `/links/{id}` | Связь с тренером и её история; активация только спортсменом |
 | GET/POST `/competitions`; GET/PUT/DELETE `/competitions/{id}` | Календарь; изменение и удаление только черновика федерацией |
+| GET/POST `/age-groups`; PUT/DELETE `/age-groups/{id}` | Справочник возрастных групп; изменение запрещено, если группа уже в объявленном соревновании, удаление — если используется |
+| GET `/competitions/{id}/eligibility?athlete_id=` | Подходит ли спортсмен по группам: возраст, пол, найденные группы, причина отказа |
 | PATCH `/competitions/{id}/state` | draft → open ↔ closed; федерация |
 | POST `/competitions/{id}/applications` | Спортсмен за себя / тренер по активной связи и дисциплине |
 | PATCH `/applications/{id}` | Федерация: pending → approved/rejected |

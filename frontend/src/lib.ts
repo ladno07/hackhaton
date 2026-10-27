@@ -79,3 +79,52 @@ export async function download(url: string, name: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(obj), 1000);
 }
+export const sexNames: Record<string, string> = {
+  male: "Мужской",
+  female: "Женский",
+};
+export const ageRules: Record<string, string> = {
+  year: "По году рождения",
+  start: "На дату старта",
+};
+export const ageRange = (min: number, max: number) =>
+  max >= 100 ? `от ${min} лет` : `${min}–${max} лет`;
+export const groupLabel = (g: any) =>
+  `${g.name} · ${ageRange(g.min_age, g.max_age)}`;
+// Competition age limits: groups from the directory, or the plain age range.
+export const ageLimits = (c: any) =>
+  c.age_groups?.length
+    ? c.age_groups.map((g: any) => g.name).join(", ")
+    : ageRange(c.min_age, c.max_age);
+export function ageHint(check: any, self: boolean) {
+  if (!check) return null;
+  const years = (n: number) =>
+    n +
+    " " +
+    (n % 10 === 1 && n % 100 !== 11
+      ? "год"
+      : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)
+        ? "года"
+        : "лет");
+  const age = `На дату старта ${self ? "вам" : "спортсмену"} ${years(check.age)}, в году соревнований исполняется ${years(check.year_age)}.`;
+  if (check.eligible)
+    return {
+      ok: true,
+      title: (self ? "Вы проходите" : "Спортсмен проходит") + " по возрасту",
+      text: check.groups.length
+        ? "Группа: " + check.groups.map(groupLabel).join("; ") + ". " + age
+        : age,
+    };
+  return {
+    ok: false,
+    title:
+      check.reason === "sex_missing"
+        ? "Укажите пол в профиле"
+        : (self ? "Вы не проходите" : "Спортсмен не проходит") +
+          (check.reason === "sex" ? " по составу групп" : " по возрасту"),
+    text:
+      check.reason === "sex_missing"
+        ? "Возрастные группы соревнования разделены на юношей и девушек. " + age
+        : age,
+  };
+}
