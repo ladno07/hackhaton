@@ -46,6 +46,8 @@ import {
 import { Competitions, CompetitionDetail } from "./competitions";
 import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 
+import { AthleteSummary } from "./athlete-summary";
+
 function Login() {
   const auth = useAuth();
   const [register, setRegister] = useState(false);
@@ -533,6 +535,10 @@ export default function App() {
               <Coaching />
             </Guard>
           }
+        />
+        <Route
+          path="coaching/athletes/:id"
+          element={<Guard roles={["coach", "admin"]}><AthleteSummary /></Guard>}
         />
         <Route
           path="assignments"

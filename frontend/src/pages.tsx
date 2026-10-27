@@ -726,6 +726,11 @@ export function Coaching() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      {["coach", "admin"].includes(role) && l.status === "active" && (
+                        <Button size="sm" variant="outline" asChild>
+                          <Link to={`/coaching/athletes/${l.athlete_id}`}>Сводка выступлений</Link>
+                        </Button>
+                      )}
                       {role === "athlete" &&
                         ["pending", "paused"].includes(l.status) && (
                           <Button
