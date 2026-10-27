@@ -8,6 +8,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 import {
   Activity,
@@ -48,10 +49,12 @@ import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 
 import { AthleteSummary } from "./athlete-summary";
 import { Assignments, JudgingHistory } from "./judging";
+import { Navigator } from "./navigator";
 
 function Login() {
   const auth = useAuth();
-  const [register, setRegister] = useState(false);
+  const [params] = useSearchParams();
+  const [register, setRegister] = useState(params.get("register") === "1");
   const [error, setError] = useState("");
   const [form, setForm] = useState<any>({
     email: "",
@@ -261,6 +264,10 @@ function Login() {
               {register ? "Войти" : "Регистрация"}
             </button>
           </div>
+          <Link className="auth-navigator" to="/start">
+            Новичкам: дисциплины, где заниматься и ближайшие старты{" "}
+            <ArrowRight size={14} />
+          </Link>
           <div className="demo-note">
             <strong>Демонстрационный доступ</strong>
             <span>admin@demo.example / DemoPass2026!</span>
@@ -503,6 +510,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/start" element={<Navigator />} />
       <Route element={<Layout />}>
         <Route index element={<Overview />} />
         <Route path="competitions" element={<Competitions />} />
