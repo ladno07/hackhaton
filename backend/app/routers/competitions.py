@@ -1,6 +1,8 @@
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from pathlib import PurePath
+from urllib.parse import quote
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import *
@@ -12,13 +14,31 @@ from app.schemas import (
     ResultsIn,
     JudgeIn,
     NameIn,
+    AgeGroupIn,
 )
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify, admins, athlete_audience
 from app.services.ratings import recalculate
+from app.services.age_groups import (
+    age_check,
+    age_error,
+    competition_groups,
+    group_view,
+)
 
 router = APIRouter(tags=["Соревнования"])
+
+REGULATION_MAX_SIZE = 10 * 1024 * 1024
+REGULATION_TYPES = {
+    ".pdf": ("application/pdf", (b"%PDF-",)),
+    ".docx": (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        (b"PK\x03\x04",),
+    ),
+    ".doc": ("application/msword", (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)),
+    ".odt": ("application/vnd.oasis.opendocument.text", (b"PK\x03\x04",)),
+}
 
 
 def locked(db, key):
@@ -28,8 +48,36 @@ def locked(db, key):
     return obj
 
 
+def regulation_info(db, comp_id):
+    obj = db.get(CompetitionRegulation, comp_id)
+    if not obj:
+        return None
+    return {k: getattr(obj, k) for k in ("filename", "size", "uploaded_at")}
+
+
+def set_groups(db, comp, data):
+    """Binds age groups; the overall age range follows the selected groups."""
+    groups = [require(db, AgeGroup, i) for i in dict.fromkeys(data.age_group_ids)]
+    if any(g.discipline_id not in (None, comp.discipline_id) for g in groups):
+        raise HTTPException(422, "Возрастная группа относится к другой дисциплине")
+    db.execute(
+        delete(CompetitionAgeGroup).where(
+            CompetitionAgeGroup.competition_id == comp.id
+        )
+    )
+    db.add_all(
+        [CompetitionAgeGroup(competition_id=comp.id, age_group_id=g.id) for g in groups]
+    )
+    if groups:
+        comp.min_age = min(g.min_age for g in groups)
+        comp.max_age = max(g.max_age for g in groups)
+
+
 def competition_view(db, comp, actor):
     data = row(comp)
+    groups = competition_groups(db, comp.id)
+    data["age_groups"] = [group_view(g) for g in groups]
+    data["regulation_file"] = regulation_info(db, comp.id)
     data["discipline"] = db.get(Discipline, comp.discipline_id).short_name
     data["participants"] = len(
         db.scalars(
@@ -40,13 +88,10 @@ def competition_view(db, comp, actor):
         ).all()
     )
     data["eligible"] = None
+    data["age_check"] = None
     if actor.role == "athlete":
-        athlete = own(db, Athlete, actor)
-        data["eligible"] = (
-            comp.min_age
-            <= age_at(athlete.user.birth_date, comp.start_date)
-            <= comp.max_age
-        )
+        data["age_check"] = age_check(db, comp, own(db, Athlete, actor), groups)
+        data["eligible"] = data["age_check"]["eligible"]
     return data
 
 
@@ -83,10 +128,12 @@ def create(
     require(db, Discipline, data.discipline_id)
     require(db, CompetitionType, data.type_id)
     obj = Competition(
-        **data.model_dump(exclude={"regulation_url"}),
+        **data.model_dump(exclude={"regulation_url", "age_group_ids"}),
         regulation_url=str(data.regulation_url) if data.regulation_url else None,
     )
     db.add(obj)
+    db.flush()
+    set_groups(db, obj, data)
     audit(db, actor, "Создание соревнования", obj)
     return row(obj)
 
@@ -103,9 +150,10 @@ def update(
         raise HTTPException(409, "Редактировать можно только черновик")
     require(db, Discipline, data.discipline_id)
     require(db, CompetitionType, data.type_id)
-    for k, v in data.model_dump(exclude={"regulation_url"}).items():
+    for k, v in data.model_dump(exclude={"regulation_url", "age_group_ids"}).items():
         setattr(obj, k, v)
     obj.regulation_url = str(data.regulation_url) if data.regulation_url else None
+    set_groups(db, obj, data)
     audit(db, actor, "Изменение соревнования", obj)
     return row(obj)
 
@@ -172,10 +220,16 @@ def detail(
     judges = db.scalars(
         select(CompetitionJudge).where(CompetitionJudge.competition_id == comp.id)
     ).all()
+    view = competition_view(db, comp, actor)
+    group_names = {g["id"]: g["name"] for g in view["age_groups"]}
     return {
-        **competition_view(db, comp, actor),
+        **view,
         "applications": [
-            {**row(a), "full_name": db.get(Athlete, a.athlete_id).user.full_name}
+            {
+                **row(a),
+                "full_name": db.get(Athlete, a.athlete_id).user.full_name,
+                "age_group": group_names.get(a.age_group_id),
+            }
             for a in db.scalars(applications)
         ],
         "results": [
@@ -195,6 +249,98 @@ def detail(
     }
 
 
+@router.put("/competitions/{comp_id}/regulation")
+async def upload_regulation(
+    comp_id: int,
+    file: UploadFile = File(...),
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Положение нельзя заменить после публикации итогов")
+    name = PurePath((file.filename or "").replace("\\", "/")).name.strip()
+    ext = PurePath(name).suffix.lower()
+    if ext not in REGULATION_TYPES:
+        raise HTTPException(422, "Допустимые форматы положения: PDF, DOCX, DOC, ODT")
+    content = await file.read(REGULATION_MAX_SIZE + 1)
+    if not content:
+        raise HTTPException(422, "Файл пустой")
+    if len(content) > REGULATION_MAX_SIZE:
+        raise HTTPException(413, "Размер положения не должен превышать 10 МБ")
+    mime, signatures = REGULATION_TYPES[ext]
+    if not content.startswith(signatures):
+        raise HTTPException(422, "Содержимое файла не соответствует расширению")
+    obj = db.get(CompetitionRegulation, comp_id) or CompetitionRegulation(
+        competition_id=comp_id
+    )
+    obj.filename = name[-255:]
+    obj.content_type = mime
+    obj.size = len(content)
+    obj.data = content
+    obj.uploaded_by = actor.user.id
+    obj.uploaded_at = now()
+    db.add(obj)
+    comp.revision += 1
+    audit(
+        db,
+        actor,
+        "Загрузка положения",
+        comp,
+        {"filename": obj.filename, "size": obj.size},
+    )
+    if comp.state != "draft":
+        athlete_ids = db.scalars(
+            select(CompetitionApplication.athlete_id).where(
+                CompetitionApplication.competition_id == comp.id,
+                CompetitionApplication.status != "rejected",
+            )
+        ).all()
+        notify(
+            db,
+            [u for a in athlete_ids for u in athlete_audience(db, a)],
+            "Обновлено положение",
+            comp.title,
+            f"competition-regulation:{comp.id}:{comp.revision}",
+        )
+    return regulation_info(db, comp_id)
+
+
+@router.delete("/competitions/{comp_id}/regulation", status_code=204)
+def remove_regulation(
+    comp_id: int, actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db)
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Положение нельзя удалить после публикации итогов")
+    obj = require(db, CompetitionRegulation, comp_id)
+    audit(db, actor, "Удаление положения", comp, {"filename": obj.filename})
+    db.delete(obj)
+
+
+@router.get("/competitions/{comp_id}/regulation")
+def download_regulation(
+    comp_id: int, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)
+):
+    comp = require(db, Competition, comp_id)
+    if comp.state == "draft" and actor.role != "admin":
+        raise HTTPException(404, "Соревнование не найдено")
+    obj = db.get(CompetitionRegulation, comp_id)
+    if not obj:
+        raise HTTPException(404, "Положение не прикреплено")
+    fallback = f"regulation-{comp_id}{PurePath(obj.filename).suffix}"
+    return Response(
+        obj.data,
+        media_type=obj.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{fallback}"; '
+            f"filename*=UTF-8''{quote(obj.filename)}",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.post("/competitions/{comp_id}/applications", status_code=201)
 def apply(
     comp_id: int,
@@ -208,14 +354,9 @@ def apply(
         raise HTTPException(409, "Приём заявок закрыт")
     if athlete.suspended_until and athlete.suspended_until >= date.today():
         raise HTTPException(422, "У спортсмена действует отстранение")
-    if (
-        not comp.min_age
-        <= age_at(athlete.user.birth_date, comp.start_date)
-        <= comp.max_age
-    ):
-        raise HTTPException(
-            422, "Спортсмен не подходит по возрасту на дату соревнования"
-        )
+    check = age_check(db, comp, athlete)
+    if not check["eligible"]:
+        raise HTTPException(422, age_error(check))
     enrollment = db.get(AthleteDiscipline, (athlete.id, comp.discipline_id))
     if (
         not enrollment
@@ -225,7 +366,10 @@ def apply(
     ):
         raise HTTPException(422, "Добавьте действующую дисциплину в профиль спортсмена")
     obj = CompetitionApplication(
-        competition_id=comp.id, athlete_id=athlete.id, submitted_by=actor.user.id
+        competition_id=comp.id,
+        athlete_id=athlete.id,
+        age_group_id=check["groups"][0]["id"] if check["groups"] else None,
+        submitted_by=actor.user.id,
     )
     db.add(obj)
     audit(db, actor, "Подача заявки", obj)
@@ -237,6 +381,19 @@ def apply(
         f"application:{obj.id}",
     )
     return row(obj)
+
+
+@router.get("/competitions/{comp_id}/eligibility")
+def eligibility(
+    comp_id: int,
+    athlete_id: int,
+    actor: Actor = Depends(allow("admin", "athlete", "coach")),
+    db: Session = Depends(get_db),
+):
+    comp = require(db, Competition, comp_id)
+    if comp.state == "draft" and actor.role != "admin":
+        raise HTTPException(404, "Соревнование не найдено")
+    return age_check(db, comp, can_athlete(db, actor, athlete_id))
 
 
 @router.patch("/applications/{application_id}")
@@ -408,3 +565,70 @@ def add_type(
     db.add(obj)
     audit(db, actor, "Создание типа соревнования", obj)
     return row(obj)
+
+
+@router.get("/age-groups")
+def age_groups(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+    return [
+        row(g)
+        for g in db.scalars(select(AgeGroup).order_by(AgeGroup.sort_order, AgeGroup.id))
+    ]
+
+
+def used_in_competitions(db, group_id, states):
+    return db.scalar(
+        select(Competition.id)
+        .join(CompetitionAgeGroup, CompetitionAgeGroup.competition_id == Competition.id)
+        .where(
+            CompetitionAgeGroup.age_group_id == group_id, Competition.state.in_(states)
+        )
+    )
+
+
+@router.post("/age-groups", status_code=201)
+def add_age_group(
+    data: AgeGroupIn,
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    if data.discipline_id:
+        require(db, Discipline, data.discipline_id)
+    obj = AgeGroup(**data.model_dump())
+    db.add(obj)
+    audit(db, actor, "Создание возрастной группы", obj, data.model_dump())
+    return row(obj)
+
+
+@router.put("/age-groups/{group_id}")
+def edit_age_group(
+    group_id: int,
+    data: AgeGroupIn,
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    obj = require(db, AgeGroup, group_id)
+    if data.discipline_id:
+        require(db, Discipline, data.discipline_id)
+    if used_in_competitions(db, group_id, ["open", "closed", "published"]):
+        raise HTTPException(
+            409, "Группа уже используется в объявленном соревновании, создайте новую"
+        )
+    for k, v in data.model_dump().items():
+        setattr(obj, k, v)
+    audit(db, actor, "Изменение возрастной группы", obj, data.model_dump())
+    return row(obj)
+
+
+@router.delete("/age-groups/{group_id}", status_code=204)
+def delete_age_group(
+    group_id: int, actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db)
+):
+    obj = require(db, AgeGroup, group_id)
+    if db.scalar(
+        select(CompetitionAgeGroup.competition_id).where(
+            CompetitionAgeGroup.age_group_id == group_id
+        )
+    ):
+        raise HTTPException(409, "Группа используется в соревнованиях")
+    audit(db, actor, "Удаление возрастной группы", obj, {"name": obj.name})
+    db.delete(obj)

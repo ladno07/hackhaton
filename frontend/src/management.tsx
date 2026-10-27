@@ -25,7 +25,16 @@ import {
   YAxis,
 } from "recharts";
 import { useAction, useAuth, useData } from "./state";
-import { date, levels, ranks, roleNames, today } from "./lib";
+import {
+  ageRange,
+  ageRules,
+  date,
+  levels,
+  ranks,
+  roleNames,
+  sexNames,
+  today,
+} from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -1204,6 +1213,198 @@ function RuleEditor({ r }: any) {
     </form>
   );
 }
+const emptyGroup = {
+  name: "",
+  discipline_id: null,
+  sex: null,
+  min_age: 14,
+  max_age: 17,
+  age_rule: "year",
+  sort_order: 0,
+};
+function AgeGroups() {
+  const meta = useData("/metadata");
+  const action = useAction();
+  const [g, setG] = useState<any>(emptyGroup);
+  const [editing, setEditing] = useState<number | null>(null);
+  const set = (k: string, val: any) => setG({ ...g, [k]: val });
+  const disciplines = Object.fromEntries(
+    (meta.data?.disciplines || []).map((d: any) => [d.id, d.short_name]),
+  );
+  return (
+    <div className="panel-padding">
+      <div className="inline-note">
+        Группы по правилам вида спорта. Федерация выбирает их в карточке
+        соревнования, а спортсмен видит подсказку, проходит ли он по возрасту.
+        Группы по умолчанию — заготовка: сверьте границы с действующими
+        правилами вида спорта. Группу, по которой уже объявлено соревнование,
+        изменить нельзя — создайте новую.
+      </div>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            await action.mutateAsync({
+              method: editing ? "put" : "post",
+              url: "/age-groups" + (editing ? "/" + editing : ""),
+              data: g,
+            });
+            setG(emptyGroup);
+            setEditing(null);
+          } catch {}
+        }}
+      >
+        <div className="form-grid">
+          <Field label="Название">
+            <input
+              required
+              minLength={2}
+              placeholder="Например, Юноши"
+              value={g.name}
+              onChange={(e) => set("name", e.target.value)}
+            />
+          </Field>
+          <Field label="Пол">
+            <select
+              value={g.sex || ""}
+              onChange={(e) => set("sex", e.target.value || null)}
+            >
+              <option value="">Любой</option>
+              {Object.entries(sexNames).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div className="form-grid">
+          <Field label="Возраст от">
+            <input
+              type="number"
+              required
+              min="0"
+              max="100"
+              value={g.min_age}
+              onChange={(e) => set("min_age", +e.target.value)}
+            />
+          </Field>
+          <Field label="Возраст до" hint="100 — без верхней границы">
+            <input
+              type="number"
+              required
+              min={g.min_age}
+              max="100"
+              value={g.max_age}
+              onChange={(e) => set("max_age", +e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="form-grid">
+          <Field label="Как считать возраст">
+            <select
+              value={g.age_rule}
+              onChange={(e) => set("age_rule", e.target.value)}
+            >
+              {Object.entries(ageRules).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Дисциплина">
+            <select
+              value={g.discipline_id || ""}
+              onChange={(e) =>
+                set("discipline_id", e.target.value ? +e.target.value : null)
+              }
+            >
+              <option value="">Все дисциплины</option>
+              {meta.data?.disciplines.map((d: any) => (
+                <option key={d.id} value={d.id}>
+                  {d.short_name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div className="row-actions">
+          <Button disabled={action.isPending}>
+            {editing ? "Сохранить группу" : "Добавить группу"}
+          </Button>
+          {editing && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setG(emptyGroup);
+                setEditing(null);
+              }}
+            >
+              Отмена
+            </Button>
+          )}
+        </div>
+      </form>
+      <div className="section-gap">
+        <State query={meta}>
+          <Table
+            heads={["Группа", "Пол", "Возраст", "Расчёт", "Дисциплина", ""]}
+          >
+            {meta.data?.age_groups.map((r: any) => (
+              <tr key={r.id}>
+                <td>
+                  <strong>{r.name}</strong>
+                </td>
+                <td>{r.sex ? sexNames[r.sex] : "Любой"}</td>
+                <td>{ageRange(r.min_age, r.max_age)}</td>
+                <td>{ageRules[r.age_rule]}</td>
+                <td>{disciplines[r.discipline_id] || "Все"}</td>
+                <td>
+                  <div className="row-actions">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(r.id);
+                        setG({
+                          name: r.name,
+                          discipline_id: r.discipline_id,
+                          sex: r.sex,
+                          min_age: r.min_age,
+                          max_age: r.max_age,
+                          age_rule: r.age_rule,
+                          sort_order: r.sort_order,
+                        });
+                      }}
+                    >
+                      Изменить
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={action.isPending}
+                      onClick={() =>
+                        confirm(`Удалить группу «${r.name}»?`) &&
+                        action.mutate({
+                          method: "delete",
+                          url: "/age-groups/" + r.id,
+                        })
+                      }
+                    >
+                      Удалить
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        </State>
+      </div>
+    </div>
+  );
+}
 export function Settings() {
   const users = useData("/users");
   const rules = useData("/rating-rules");
@@ -1237,6 +1438,7 @@ export function Settings() {
             ["rules", "Правила рейтинга"],
             ["users", "Доступ и роли"],
             ["references", "Справочники и сроки"],
+            ["age", "Возрастные группы"],
             ["evsk", "Подсказки ЕВСК"],
           ].map(([k, v]) => (
             <button
@@ -1340,6 +1542,7 @@ export function Settings() {
             </div>
           </div>
         )}
+        {tab === "age" && <AgeGroups />}
         {tab === "evsk" && (
           <div className="panel-padding">
             <div className="inline-note">

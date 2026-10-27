@@ -548,3 +548,195 @@ def test_notifications_respect_active_role(env):
         client.patch(f"/api/notifications/{nid}/read", headers=switched).status_code
         == 403
     )
+
+
+def test_regulation_upload_and_download(env):
+    client, factory, h, users = env
+    comp = competition(client, h["admin"])
+    url = f"/api/competitions/{comp['id']}/regulation"
+    pdf = b"%PDF-1.4\n% demo regulation\n%%EOF"
+
+    def upload(name, content):
+        return client.put(
+            url, headers=h["admin"], files={"file": (name, content, "text/plain")}
+        )
+
+    assert upload("polozhenie.txt", b"hello").status_code == 422
+    assert upload("fake.pdf", b"PK\x03\x04zip").status_code == 422
+    assert upload("big.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024)).status_code == 413
+    assert (
+        client.put(
+            url, headers=h["athlete"], files={"file": ("a.pdf", pdf)}
+        ).status_code
+        == 403
+    )
+    res = upload("C:\\docs\\Положение турнира.pdf", pdf)
+    assert res.status_code == 200, res.text
+    assert res.json()["filename"] == "Положение турнира.pdf"
+    assert client.get(url, headers=h["athlete"]).status_code == 404
+    client.patch(
+        f"/api/competitions/{comp['id']}/state",
+        headers=h["admin"],
+        json={"state": "open"},
+    )
+    detail = client.get(f"/api/competitions/{comp['id']}", headers=h["athlete"])
+    assert detail.json()["regulation_file"]["size"] == len(pdf)
+    file = client.get(url, headers=h["athlete"])
+    assert file.status_code == 200
+    assert file.content == pdf
+    assert file.headers["content-type"] == "application/pdf"
+    assert "filename*=UTF-8''" in file.headers["content-disposition"]
+    assert client.delete(url, headers=h["admin"]).status_code == 204
+    assert client.get(url, headers=h["athlete"]).status_code == 404
+    assert (
+        client.get(f"/api/competitions/{comp['id']}", headers=h["athlete"]).json()[
+            "regulation_file"
+        ]
+        is None
+    )
+
+
+def test_demo_competitions_have_regulation(env):
+    client, factory, h, users = env
+    comps = client.get("/api/competitions?state=open", headers=h["athlete"]).json()
+    comp = next(c for c in comps if c["regulation_file"])
+    file = client.get(f"/api/competitions/{comp['id']}/regulation", headers=h["athlete"])
+    assert file.status_code == 200 and file.content.startswith(b"%PDF-")
+
+
+def test_age_groups_eligibility_and_hint(env):
+    client, factory, h, u = env
+    aid = u["athlete"]["athlete_id"]
+    groups = {
+        g["name"]: g
+        for g in client.get("/api/age-groups", headers=h["athlete"]).json()
+    }
+    assert {"Юноши", "Девушки", "Мужчины", "Женщины"} <= set(groups)
+    # Demo athlete is female and turns 17 this year.
+    comp = open_comp(
+        client,
+        h["admin"],
+        age_group_ids=[groups["Юноши"]["id"], groups["Девушки"]["id"]],
+    )
+    assert (comp["min_age"], comp["max_age"]) == (14, 17)
+    view = client.get(f"/api/competitions/{comp['id']}", headers=h["athlete"]).json()
+    assert view["eligible"] is True
+    assert [g["name"] for g in view["age_check"]["groups"]] == ["Девушки"]
+    hint = client.get(
+        f"/api/competitions/{comp['id']}/eligibility",
+        headers=h["athlete"],
+        params={"athlete_id": aid},
+    ).json()
+    assert hint["eligible"] and hint["year_age"] == 17
+    res = client.post(
+        f"/api/competitions/{comp['id']}/applications",
+        headers=h["athlete"],
+        json={"athlete_id": aid},
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["age_group_id"] == groups["Девушки"]["id"]
+    detail = client.get(f"/api/competitions/{comp['id']}", headers=h["admin"]).json()
+    assert detail["applications"][0]["age_group"] == "Девушки"
+
+    # Only boys: age fits, sex does not; without sex the athlete is asked to fill it.
+    boys = open_comp(client, h["admin"], age_group_ids=[groups["Юноши"]["id"]])
+    view = client.get(f"/api/competitions/{boys['id']}", headers=h["athlete"]).json()
+    assert view["age_check"]["reason"] == "sex" and view["eligible"] is False
+    with factory() as db:
+        db.get(User, u["athlete"]["id"]).sex = None
+        db.commit()
+    res = client.post(
+        f"/api/competitions/{boys['id']}/applications",
+        headers=h["athlete"],
+        json={"athlete_id": aid},
+    )
+    assert res.status_code == 422 and "пол" in res.json()["detail"]
+
+    adults = open_comp(client, h["admin"], age_group_ids=[groups["Женщины"]["id"]])
+    view = client.get(f"/api/competitions/{adults['id']}", headers=h["athlete"]).json()
+    assert view["age_check"]["reason"] == "age"
+    listed = client.get(
+        "/api/competitions", headers=h["athlete"], params={"eligible": True}
+    ).json()
+    assert adults["id"] not in {c["id"] for c in listed}
+
+
+def test_age_group_directory_management(env):
+    client, _, h, _users = env
+    payload = dict(
+        name="Мальчики", sex="male", min_age=10, max_age=13, age_rule="start"
+    )
+    assert (
+        client.post("/api/age-groups", headers=h["athlete"], json=payload).status_code
+        == 403
+    )
+    bad = client.post(
+        "/api/age-groups", headers=h["admin"], json={**payload, "min_age": 15}
+    )
+    assert bad.status_code == 422
+    group = client.post("/api/age-groups", headers=h["admin"], json=payload).json()
+    other = client.post(
+        "/api/age-groups", headers=h["admin"], json={**payload, "discipline_id": 2}
+    ).json()
+    comp = competition(client, h["admin"], age_group_ids=[group["id"]])
+    payload_comp = {
+        k: comp[k]
+        for k in [
+            "title", "discipline_id", "type_id", "start_date", "end_date",
+            "deadline", "location", "format", "level", "calendar_plan",
+            "calendar_number",
+        ]
+    }
+    res = client.post(
+        "/api/competitions",
+        headers=h["admin"],
+        json={**payload_comp, "age_group_ids": [other["id"]]},
+    )
+    assert res.status_code == 422
+    assert (
+        client.put(
+            f"/api/age-groups/{group['id']}",
+            headers=h["admin"],
+            json={**payload, "max_age": 12},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.delete(f"/api/age-groups/{group['id']}", headers=h["admin"]).status_code
+        == 409
+    )
+    client.patch(
+        f"/api/competitions/{comp['id']}/state", headers=h["admin"], json={"state": "open"}
+    )
+    assert (
+        client.put(
+            f"/api/age-groups/{group['id']}", headers=h["admin"], json=payload
+        ).status_code
+        == 409
+    )
+    assert (
+        client.delete(f"/api/age-groups/{other['id']}", headers=h["admin"]).status_code
+        == 204
+    )
+
+
+def test_profile_sex(env):
+    client, _, h, u = env
+    aid = u["athlete"]["athlete_id"]
+    profile = client.get(f"/api/athletes/{aid}", headers=h["athlete"]).json()
+    assert profile["sex"] == "female"
+    body = {
+        k: profile[k]
+        for k in ["full_name", "organization_id", "municipality", "training_stage"]
+    }
+    body["disciplines"] = [
+        {k: d[k] for k in ["discipline_id", "start_year", "end_year"]}
+        for d in profile["disciplines"]
+    ]
+    res = client.put(f"/api/athletes/{aid}", headers=h["athlete"], json=body)
+    assert res.json()["sex"] == "female"
+    res = client.put(
+        f"/api/athletes/{aid}", headers=h["athlete"], json={**body, "sex": "male"}
+    )
+    assert res.json()["sex"] == "male"
+    assert client.get("/api/auth/me", headers=h["athlete"]).json()["sex"] == "male"

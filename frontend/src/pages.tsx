@@ -25,7 +25,7 @@ import {
   YAxis,
 } from "recharts";
 import { useAction, useAuth, useData } from "./state";
-import { date, formats, roleNames, today } from "./lib";
+import { date, formats, roleNames, sexNames, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -395,6 +395,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
   const action = useAction();
   const [v, setV] = useState<any>({
     full_name: athlete.full_name,
+    sex: athlete.sex || "",
     organization_id: athlete.organization_id,
     municipality: athlete.municipality,
     training_stage: athlete.training_stage || "",
@@ -413,6 +414,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             url: "/athletes/" + athlete.id,
             data: {
               ...v,
+              sex: v.sex || null,
               disciplines: v.disciplines.map(
                 ({ discipline_id, start_year, end_year }: any) => ({
                   discipline_id,
@@ -429,14 +431,29 @@ export function ProfileEditor({ athlete, onSaved }: any) {
         } catch {}
       }}
     >
-      <Field label="ФИО">
-        <input
-          required
-          minLength={3}
-          value={v.full_name}
-          onChange={(e) => change("full_name", e.target.value)}
-        />
-      </Field>
+      <div className="form-grid">
+        <Field label="ФИО">
+          <input
+            required
+            minLength={3}
+            value={v.full_name}
+            onChange={(e) => change("full_name", e.target.value)}
+          />
+        </Field>
+        <Field label="Пол" hint="Нужен для возрастных групп соревнований">
+          <select
+            value={v.sex}
+            onChange={(e) => change("sex", e.target.value)}
+          >
+            <option value="">Не указан</option>
+            {Object.entries(sexNames).map(([k, s]) => (
+              <option key={k} value={k}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
       <div className="form-grid">
         <Field label="Муниципалитет">
           <input

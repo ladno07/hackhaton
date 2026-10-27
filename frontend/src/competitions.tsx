@@ -15,12 +15,25 @@ import {
   Plus,
   Send,
   Settings2,
+  Trash2,
   Trophy,
+  Upload,
   Users,
   X,
 } from "lucide-react";
-import { useAction, useAuth, useData } from "./state";
-import { date, formats, levels, today } from "./lib";
+import { useAction, useAuth, useData, useToast } from "./state";
+import {
+  ageHint,
+  ageLimits,
+  ageRules,
+  date,
+  download,
+  errorText,
+  formats,
+  groupLabel,
+  levels,
+  today,
+} from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -33,9 +46,137 @@ import {
   State,
   Table,
 } from "./components/shared";
+const REGULATION_ACCEPT = ".pdf,.docx,.doc,.odt";
+const REGULATION_MAX_MB = 10;
+const fileSize = (n: number) =>
+  n < 1024 * 1024
+    ? Math.max(1, Math.round(n / 1024)) + " КБ"
+    : (n / 1024 / 1024).toFixed(1).replace(".", ",") + " МБ";
+const regulationForm = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return form;
+};
+function tooBig(file: File | null) {
+  return !!file && file.size > REGULATION_MAX_MB * 1024 * 1024;
+}
+export function Regulation({ comp }: any) {
+  const { role } = useAuth();
+  const action = useAction();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const file = comp.regulation_file;
+  const editable = role === "admin" && comp.state !== "published";
+  return (
+    <div className="regulation">
+      {file ? (
+        <button
+          type="button"
+          className="text-link"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await download(
+                "/competitions/" + comp.id + "/regulation",
+                file.filename,
+              );
+            } catch (e) {
+              toast(errorText(e), true);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Download size={14} />
+          Скачать положение
+        </button>
+      ) : (
+        !comp.regulation_url && <strong>Не прикреплено</strong>
+      )}
+      {file && (
+        <small>
+          {file.filename} · {fileSize(file.size)} · {date(file.uploaded_at)}
+        </small>
+      )}
+      {comp.regulation_url && (
+        <a
+          href={comp.regulation_url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-link"
+        >
+          Открыть по ссылке <ArrowRight size={14} />
+        </a>
+      )}
+      {editable && (
+        <div className="row-actions">
+          <label className="text-link regulation-upload">
+            <Upload size={14} />
+            {file ? "Заменить файл" : "Загрузить файл"}
+            <input
+              type="file"
+              accept={REGULATION_ACCEPT}
+              disabled={action.isPending}
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                e.target.value = "";
+                if (!f) return;
+                if (tooBig(f))
+                  return toast(
+                    `Размер положения не должен превышать ${REGULATION_MAX_MB} МБ`,
+                    true,
+                  );
+                action.mutate({
+                  method: "put",
+                  url: "/competitions/" + comp.id + "/regulation",
+                  data: regulationForm(f),
+                });
+              }}
+            />
+          </label>
+          {file && (
+            <button
+              type="button"
+              className="text-link text-danger"
+              disabled={action.isPending}
+              onClick={() =>
+                confirm("Удалить файл положения?") &&
+                action.mutate({
+                  method: "delete",
+                  url: "/competitions/" + comp.id + "/regulation",
+                })
+              }
+            >
+              <Trash2 size={14} />
+              Удалить
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+export function AgeHint({ check, self }: any) {
+  const hint = ageHint(check, self);
+  if (!hint) return null;
+  return (
+    <div className={"age-hint" + (hint.ok ? "" : " age-hint-no")} role="status">
+      <strong>{hint.title}</strong>
+      {hint.text}
+      {self && check.reason === "sex_missing" && (
+        <>
+          {" "}
+          <Link to="/profile">Заполнить профиль</Link>
+        </>
+      )}
+    </div>
+  );
+}
 export function CompetitionForm({ initial, onSaved }: any) {
   const meta = useData("/metadata");
   const action = useAction();
+  const [file, setFile] = useState<File | null>(null);
   const [v, setV] = useState<any>(
     initial
       ? Object.fromEntries(
@@ -54,7 +195,14 @@ export function CompetitionForm({ initial, onSaved }: any) {
             "calendar_plan",
             "calendar_number",
             "regulation_url",
-          ].map((k) => [k, initial[k]]),
+          ]
+            .map((k) => [k, initial[k]])
+            .concat([
+              [
+                "age_group_ids",
+                (initial.age_groups || []).map((g: any) => g.id),
+              ],
+            ]),
         )
       : {
           title: "",
@@ -68,12 +216,17 @@ export function CompetitionForm({ initial, onSaved }: any) {
           level: "regional",
           min_age: 0,
           max_age: 100,
+          age_group_ids: [],
           calendar_plan: "Оренбургская область",
           calendar_number: "",
           regulation_url: null,
         },
   );
   const set = (k: string, val: any) => setV({ ...v, [k]: val });
+  const groups = (meta.data?.age_groups || []).filter(
+    (g: any) => !g.discipline_id || g.discipline_id === v.discipline_id,
+  );
+  const picked = groups.filter((g: any) => v.age_group_ids.includes(g.id));
   const field = (k: string, label: string, type = "text", props: any = {}) => (
     <Field label={label}>
       <input
@@ -92,11 +245,22 @@ export function CompetitionForm({ initial, onSaved }: any) {
       onSubmit={async (e) => {
         e.preventDefault();
         try {
-          await action.mutateAsync({
+          const saved = await action.mutateAsync({
             method: initial ? "put" : "post",
             url: "/competitions" + (initial ? "/" + initial.id : ""),
-            data: { ...v, regulation_url: v.regulation_url || null },
+            data: {
+              ...v,
+              // groups of another discipline are dropped when it changes
+              age_group_ids: picked.map((g: any) => g.id),
+              regulation_url: v.regulation_url || null,
+            },
           });
+          if (file)
+            await action.mutateAsync({
+              method: "put",
+              url: "/competitions/" + saved.id + "/regulation",
+              data: regulationForm(file),
+            });
           onSaved();
         } catch {}
       }}
@@ -171,30 +335,75 @@ export function CompetitionForm({ initial, onSaved }: any) {
           </select>
         </Field>
       </div>
-      <div className="form-grid">
-        {field("min_age", "Минимальный возраст", "number", {
-          min: 0,
-          max: 100,
-        })}
-        {field("max_age", "Максимальный возраст", "number", {
-          min: 0,
-          max: 100,
-        })}
+      <div className="field" role="group" aria-labelledby="age-groups-label">
+        <span id="age-groups-label">Возрастные группы</span>
+        <div className="group-picker">
+          {groups.map((g: any) => (
+            <label className="check-line" key={g.id}>
+              <input
+                type="checkbox"
+                checked={v.age_group_ids.includes(g.id)}
+                onChange={(e) =>
+                  set(
+                    "age_group_ids",
+                    e.target.checked
+                      ? [...v.age_group_ids, g.id]
+                      : v.age_group_ids.filter((x: number) => x !== g.id),
+                  )
+                }
+              />
+              <span title={ageRules[g.age_rule]}>{groupLabel(g)}</span>
+            </label>
+          ))}
+        </div>
+        <small>
+          {picked.length
+            ? "Допуск определяется группами, общий диапазон рассчитается автоматически"
+            : "Группы не выбраны: допуск по диапазону возраста на дату старта"}
+        </small>
       </div>
+      {!picked.length && (
+        <div className="form-grid">
+          {field("min_age", "Минимальный возраст", "number", {
+            min: 0,
+            max: 100,
+          })}
+          {field("max_age", "Максимальный возраст", "number", {
+            min: 0,
+            max: 100,
+          })}
+        </div>
+      )}
       <div className="form-grid">
         {field("calendar_plan", "Календарный план", "text", { readOnly: true })}
         {field("calendar_number", "Номер в календарном плане")}
       </div>
-      <Field label="Ссылка на положение (PDF или документ)">
-        <input
-          type="url"
-          value={v.regulation_url || ""}
-          placeholder="https://…"
-          onChange={(e) => set("regulation_url", e.target.value)}
-        />
-      </Field>
+      <div className="form-grid">
+        <Field
+          label="Файл положения"
+          hint={
+            initial?.regulation_file && !file
+              ? "Прикреплён: " + initial.regulation_file.filename
+              : `PDF, DOCX, DOC или ODT, до ${REGULATION_MAX_MB} МБ`
+          }
+        >
+          <input
+            type="file"
+            accept={REGULATION_ACCEPT}
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+        </Field>
+        <Field label="Ссылка на положение (необязательно)">
+          <input
+            type="url"
+            value={v.regulation_url || ""}
+            placeholder="https://…"
+            onChange={(e) => set("regulation_url", e.target.value)}
+          />
+        </Field>
+      </div>
       <div className="form-footer">
-        <Button disabled={action.isPending}>
+        <Button disabled={action.isPending || tooBig(file)}>
           {initial ? "Сохранить" : "Создать черновик"}
         </Button>
       </div>
@@ -316,8 +525,19 @@ export function Competitions() {
                       </span>
                       <span>
                         <Users size={14} />
-                        {c.min_age}–{c.max_age} лет
+                        {ageLimits(c)}
                       </span>
+                      {c.age_check && (
+                        <span
+                          className={
+                            c.eligible ? "text-success" : "text-danger"
+                          }
+                        >
+                          {c.eligible
+                            ? "Вы проходите по возрасту"
+                            : "Не проходите по возрасту"}
+                        </span>
+                      )}
                       <span>{formats[c.format]}</span>
                     </div>
                   </div>
@@ -451,6 +671,10 @@ export function CompetitionDetail() {
   const [judge, setJudge] = useState("");
   const [position, setPosition] = useState("Главный судья");
   const comp = query.data;
+  const eligibility = useData(
+    `/competitions/${id}/eligibility?athlete_id=${athlete}`,
+    role === "coach" && !!athlete,
+  );
   const [comments, setComments] = useState<Record<string, string>>({});
   return (
     <>
@@ -527,10 +751,23 @@ export function CompetitionDetail() {
                   <strong>{levels[comp.level]}</strong>
                 </div>
                 <div>
-                  <span>Возраст на дату старта</span>
+                  <span>
+                    {comp.age_groups.length
+                      ? "Возрастные группы"
+                      : "Возраст на дату старта"}
+                  </span>
                   <strong>
-                    {comp.min_age}–{comp.max_age} лет
+                    {comp.age_groups.length
+                      ? comp.age_groups.map((g: any) => (
+                          <span key={g.id} className="block">
+                            {groupLabel(g)}
+                          </span>
+                        ))
+                      : ageLimits(comp)}
                   </strong>
+                  {comp.age_groups.some((g: any) => g.age_rule === "year") && (
+                    <small>Возраст считается по году рождения</small>
+                  )}
                 </div>
                 <div>
                   <span>Приём заявок до</span>
@@ -544,18 +781,7 @@ export function CompetitionDetail() {
                 </div>
                 <div>
                   <span>Положение</span>
-                  {comp.regulation_url ? (
-                    <a
-                      href={comp.regulation_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-link"
-                    >
-                      Открыть документ <ArrowRight size={14} />
-                    </a>
-                  ) : (
-                    <strong>Не прикреплено</strong>
-                  )}
+                  <Regulation comp={comp} />
                 </div>
               </div>
               {["athlete", "coach"].includes(role) && (
@@ -580,6 +806,12 @@ export function CompetitionDetail() {
                     Федерация рассмотрит заявку и сообщит решение в личном
                     кабинете.
                   </p>
+                  {role === "athlete" && (
+                    <AgeHint check={comp.age_check} self />
+                  )}
+                  {role === "coach" && eligibility.data && (
+                    <AgeHint check={eligibility.data} />
+                  )}
                   {role === "coach" && (
                     <Field label="Спортсмен">
                       <select
@@ -601,6 +833,7 @@ export function CompetitionDetail() {
                       action.isPending ||
                       comp.state !== "open" ||
                       comp.eligible === false ||
+                      (role === "coach" && eligibility.data?.eligible === false) ||
                       comp.deadline < today() ||
                       (role === "athlete" &&
                         comp.applications.some(
@@ -613,11 +846,13 @@ export function CompetitionDetail() {
                       (a: any) => a.athlete_id === user.athlete_id,
                     )
                       ? "Заявка уже подана"
-                      : comp.eligible === false
-                        ? "Не подходит по возрасту"
-                        : comp.state === "open"
-                          ? "Подать заявку"
-                          : "Приём завершён"}
+                      : comp.age_check?.reason === "sex_missing"
+                        ? "Укажите пол в профиле"
+                        : comp.eligible === false
+                          ? "Не подходит по возрасту"
+                          : comp.state === "open"
+                            ? "Подать заявку"
+                            : "Приём завершён"}
                   </Button>
                 </form>
               )}
@@ -644,13 +879,20 @@ export function CompetitionDetail() {
               {tab === "applications" &&
                 (comp.applications.length ? (
                   <Table
-                    heads={["Спортсмен", "Дата заявки", "Статус", "Решение"]}
+                    heads={[
+                      "Спортсмен",
+                      "Группа",
+                      "Дата заявки",
+                      "Статус",
+                      "Решение",
+                    ]}
                   >
                     {comp.applications.map((a: any) => (
                       <tr key={a.id}>
                         <td>
                           <strong>{a.full_name}</strong>
                         </td>
+                        <td>{a.age_group || "—"}</td>
                         <td>{date(a.created_at)}</td>
                         <td>
                           <Badge value={a.status} />
