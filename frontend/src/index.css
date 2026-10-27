@@ -632,6 +632,37 @@ td a:hover {
   color: var(--fsp-neutral-600);
   font-size: 9px;
 }
+/* Документы о судействе во вкладке «Судейская коллегия» */
+.judging-docs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--fsp-neutral-100);
+  background: var(--fsp-neutral-50);
+}
+.judging-docs > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fsp-neutral-700);
+}
+.judging-doc-links > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.judging-doc-links > div + div {
+  margin-top: 6px;
+}
+.judging-doc-links small {
+  min-width: 42px;
+  font-size: 10px;
+  color: var(--fsp-neutral-400);
+}
 .dialog-overlay {
   position: fixed;
   inset: 0;

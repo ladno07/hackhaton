@@ -68,11 +68,15 @@ export function JudgingHistory() {
         </div>
         <section className="panel section-gap">
           <div className="panel-heading"><h2>Отчёт · {data.judge.full_name}</h2></div>
-          {data.items.length ? <Table heads={["Соревнование", "Даты", "Дисциплина", "Статус", "Должность", "Участников", "Протокол"]}>
+          {data.items.length ? <Table heads={["Соревнование", "Даты", "Дисциплина", "Статус", "Должность", "Участников", "Протокол", "Документы"]}>
             {data.items.map((i: any) => <tr key={i.competition_id}>
               <td><Link to={"/competitions/" + i.competition_id}><strong>{i.title}</strong></Link><br /><small>{i.location}</small></td>
               <td>{dates(i)}</td><td>{i.discipline}</td><td>{statuses[i.status] || i.status}</td>
               <td>{i.position}</td><td>{i.participants}</td><td><Badge value={i.state} /></td>
+              <td className="judging-doc-links">
+                <div><small>Состав</small><ExportButtons base={"/exports/panel/" + i.competition_id} name={"panel-" + i.competition_id} formats={["pdf"]} /></div>
+                {i.position === "Главный судья" && i.state === "published" && <div><small>Отчёт</small><ExportButtons base={"/exports/chief-report/" + i.competition_id} name={"chief-report-" + i.competition_id} formats={["pdf"]} /></div>}
+              </td>
             </tr>)}
           </Table> : <Empty text="Прошедших соревнований нет" hint="Здесь появятся соревнования, где вы работали, после их завершения." />}
         </section>
