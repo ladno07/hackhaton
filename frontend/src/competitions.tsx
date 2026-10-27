@@ -759,6 +759,21 @@ function ProtocolHistory({ id }: any) {
     </State>
   );
 }
+// Документы о судействе: состав коллегии — федерации, Минспорту и судьям
+// коллегии; отчёт главного судьи — после публикации протокола.
+export function judgingDocs(comp: any, role: string, user: any) {
+  const seat = comp.judges.find((j: any) => j.judge_id === user?.judge_id);
+  const reader = role === "admin" || role === "ministry";
+  const docs: [string, string][] = [];
+  if (comp.judges.length && (reader || (role === "judge" && seat)))
+    docs.push(["panel", "Состав судейской коллегии"]);
+  if (
+    comp.state === "published" &&
+    (reader || (role === "judge" && seat?.position === "Главный судья"))
+  )
+    docs.push(["chief-report", "Отчёт главного судьи"]);
+  return docs;
+}
 export function CompetitionDetail() {
   const { id } = useParams();
   const { role, user } = useAuth();
@@ -1188,6 +1203,19 @@ export function CompetitionDetail() {
                       </Field>
                       <Button disabled={action.isPending}>Назначить</Button>
                     </form>
+                  )}
+                  {judgingDocs(comp, role, user).length > 0 && (
+                    <div className="judging-docs">
+                      {judgingDocs(comp, role, user).map(([kind, label]) => (
+                        <div key={kind}>
+                          <span>{label}</span>
+                          <ExportButtons
+                            base={`/exports/${kind}/${comp.id}`}
+                            name={`${kind}-${comp.id}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   )}
                   {comp.judges.length ? (
                     <Table heads={["Судья", "Должность"]}>
