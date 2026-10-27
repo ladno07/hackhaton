@@ -278,3 +278,54 @@ def team_export(
         "team-order" if order else "team",
         subtitle,
     )
+
+
+@router.get("/coaching/athletes/{athlete_id}/summary")
+def coaching_summary(
+    athlete_id: int,
+    year: int | None = Query(None, ge=1970, le=2100),
+    discipline_id: int | None = Query(None, ge=1),
+    actor: Actor = Depends(allow("coach", "admin")),
+    db: Session = Depends(get_db),
+):
+    athlete = can_athlete(db, actor, athlete_id)
+    entries = db.execute(
+        select(CompetitionResult, Competition, Discipline)
+        .join(Competition, Competition.id == CompetitionResult.competition_id)
+        .join(Discipline, Discipline.id == Competition.discipline_id)
+        .where(
+            CompetitionResult.athlete_id == athlete.id, Competition.state == "published"
+        )
+        .order_by(Competition.start_date.desc(), Competition.id.desc())
+    ).all()
+    results = [
+        {
+            "id": result.id,
+            "competition_id": comp.id,
+            "title": comp.title,
+            "start_date": comp.start_date,
+            "discipline_id": discipline.id,
+            "discipline": discipline.short_name,
+            "place": result.place,
+            "score": result.score,
+            "team_name": result.team_name,
+        }
+        for result, comp, discipline in entries
+        if (year is None or comp.start_date.year == year)
+        and (discipline_id is None or comp.discipline_id == discipline_id)
+    ]
+    return {
+        "athlete": {"id": athlete.id, "full_name": athlete.user.full_name},
+        "years": sorted({comp.start_date.year for _, comp, _ in entries}, reverse=True),
+        "disciplines": [
+            {"id": key, "name": name}
+            for key, name in sorted({(d.id, d.short_name) for _, _, d in entries})
+        ],
+        "stats": {
+            "performances": len(results),
+            "wins": sum(r["place"] == 1 for r in results),
+            "podiums": sum(r["place"] <= 3 for r in results),
+            "best_place": min((r["place"] for r in results), default=None),
+        },
+        "results": results,
+    }
