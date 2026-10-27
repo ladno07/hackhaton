@@ -809,3 +809,209 @@ def test_rating_level_follows_edit_and_new_type(env):
     )
     assert res.status_code == 200, res.text
     assert res.json()["rating_level"] == "russian_junior"
+
+
+def closed_comp(client, h, factory, count):
+    """Closed competition with `count` approved demo athletes."""
+    comp = open_comp(client, h["admin"])
+    with factory() as db:
+        athletes = db.scalars(select(Athlete).order_by(Athlete.id).limit(count)).all()
+        db.add_all(
+            [
+                CompetitionApplication(
+                    competition_id=comp["id"],
+                    athlete_id=a.id,
+                    submitted_by=a.user_id,
+                    status="approved",
+                )
+                for a in athletes
+            ]
+        )
+        db.commit()
+        ids = [a.id for a in athletes]
+    res = client.patch(
+        f"/api/competitions/{comp['id']}/state",
+        headers=h["admin"],
+        json={"state": "closed"},
+    )
+    assert res.status_code == 200, res.text
+    return comp["id"], ids
+
+
+def entries(ids, places, teams=None, scores=None):
+    return [
+        {
+            "athlete_id": a,
+            "place": p,
+            "score": (scores or [100 - p] * len(ids))[i],
+            "team_name": (teams or [None] * len(ids))[i],
+        }
+        for i, (a, p) in enumerate(zip(ids, places))
+    ]
+
+
+@pytest.mark.parametrize(
+    "places, ok",
+    [
+        ([1, 1, 3, 4], True),
+        ([1, 2, 2, 4], True),
+        ([1, 1, 1, 1], True),
+        ([1, 1, 2, 3], False),
+        ([2, 2, 3, 4], False),
+        ([1, 2, 3, 5], False),
+    ],
+)
+def test_shared_places(env, places, ok):
+    client, factory, h, _ = env
+    cid, ids = closed_comp(client, h, factory, 4)
+    res = client.post(
+        f"/api/competitions/{cid}/results",
+        headers=h["admin"],
+        json={"results": entries(ids, places)},
+    )
+    assert res.status_code == (200 if ok else 422), res.text
+
+
+def test_shared_first_place_gives_equal_points(env):
+    client, factory, h, _ = env
+    cid, ids = closed_comp(client, h, factory, 3)
+    res = client.post(
+        f"/api/competitions/{cid}/results",
+        headers=h["admin"],
+        json={"results": entries(ids, [1, 1, 3])},
+    )
+    assert res.status_code == 200, res.text
+    with factory() as db:
+        recalculate(db, date.today().year)
+        db.commit()
+        points = {
+            r.athlete_id: [
+                b["points"] for b in r.breakdown if b["competition_id"] == cid
+            ]
+            for r in db.scalars(select(Rating).where(Rating.athlete_id.in_(ids)))
+        }
+    assert points[ids[0]] == points[ids[1]] == [40] and points[ids[2]] == [20]
+
+
+def test_team_entries(env):
+    client, factory, h, _ = env
+    cid, ids = closed_comp(client, h, factory, 5)
+    teams = ["Альфа", "Альфа", "Бета", "Бета", None]
+    bad = client.post(
+        f"/api/competitions/{cid}/results",
+        headers=h["admin"],
+        json={"results": entries(ids, [1, 2, 3, 3, 4], teams)},
+    )
+    assert bad.status_code == 422 and "Альфа" in bad.text
+    # places count entries: two teams and one individual athlete
+    res = client.post(
+        f"/api/competitions/{cid}/results",
+        headers=h["admin"],
+        json={"results": entries(ids, [1, 1, 2, 2, 3], teams)},
+    )
+    assert res.status_code == 200, res.text
+    comp = client.get(f"/api/competitions/{cid}", headers=h["athlete"]).json()
+    assert [r["team_name"] for r in comp["results"]] == teams
+    export = client.get(f"/api/exports/protocol/{cid}.xlsx", headers=h["athlete"])
+    assert export.status_code == 200
+    from openpyxl import load_workbook
+
+    sheet = load_workbook(BytesIO(export.content)).active
+    assert [c.value for c in sheet[3]][:2] == ["Место", "Команда"]
+
+
+def test_protocol_correction_creates_version(env):
+    client, factory, h, _ = env
+    cid, ids = closed_comp(client, h, factory, 3)
+    body = {"results": entries(ids, [1, 2, 3]), "reason": "Ошибка в подсчёте"}
+    assert (
+        client.put(f"/api/competitions/{cid}/results", headers=h["admin"], json=body)
+        .status_code
+        == 409
+    )
+    client.post(
+        f"/api/competitions/{cid}/results",
+        headers=h["admin"],
+        json={"results": entries(ids, [1, 2, 3])},
+    )
+    before = client.get(f"/api/competitions/{cid}", headers=h["admin"]).json()
+    assert before["protocol_version"] == 1
+    with factory() as db:
+        result = db.scalar(
+            select(CompetitionResult).where(
+                CompetitionResult.competition_id == cid,
+                CompetitionResult.athlete_id == ids[0],
+            )
+        )
+        db.add(
+            SportsRank(
+                athlete_id=ids[0],
+                discipline_id=1,
+                name="III",
+                assigned_on=date.today(),
+                expires_on=date.today() + timedelta(days=365),
+                order_number="TEST-R",
+                result_id=result.id,
+            )
+        )
+        db.commit()
+    url = f"/api/competitions/{cid}/results"
+    assert client.put(url, headers=h["athlete"], json=body).status_code == 403
+    assert client.put(url, headers=h["admin"], json=body).status_code == 422
+    assert (
+        client.put(
+            url, headers=h["admin"], json={**body, "reason": "нет"}
+        ).status_code
+        == 422
+    )
+    fixed = {**body, "results": entries(ids, [2, 1, 3])}
+    res = client.put(url, headers=h["admin"], json=fixed)
+    assert res.status_code == 200, res.text
+    assert res.json()["version"] == 2 and res.json()["changed"] == 2
+    assert any("III" in w for w in res.json()["rank_warnings"])
+    after = client.get(f"/api/competitions/{cid}", headers=h["admin"]).json()
+    assert after["protocol_version"] == 2
+    # rows are updated in place, so rank bases keep pointing at them
+    assert {r["id"] for r in after["results"]} == {r["id"] for r in before["results"]}
+    assert {r["athlete_id"]: r["place"] for r in after["results"]}[ids[0]] == 2
+    history = client.get(
+        f"/api/competitions/{cid}/protocol-versions", headers=h["athlete"]
+    ).json()
+    assert [v["version"] for v in history] == [2, 1]
+    assert history[0]["reason"] == "Ошибка в подсчёте"
+    assert {(c["old_place"], c["place"]) for c in history[0]["changes"]} == {
+        (1, 2),
+        (2, 1),
+    }
+    assert history[0]["rank_warnings"] and history[1]["changes"] == []
+    with factory() as db:
+        user_id = db.get(Athlete, ids[1]).user_id
+        assert db.scalar(
+            select(Notification.id).where(
+                Notification.user_id == user_id,
+                Notification.event_key == f"protocol:{cid}:{ids[1]}:v2",
+            )
+        )
+        rating = db.scalar(select(Rating).where(Rating.athlete_id == ids[1]))
+        assert any(
+            b["competition_id"] == cid and b["place"] == 1 for b in rating.breakdown
+        )
+    from openpyxl import load_workbook
+
+    for version, first in [(1, ids[0]), (None, ids[1])]:
+        query = f"?version={version}" if version else ""
+        export = client.get(
+            f"/api/exports/protocol/{cid}.xlsx{query}", headers=h["athlete"]
+        )
+        assert export.status_code == 200, export.text
+        sheet = load_workbook(BytesIO(export.content)).active
+        with factory() as db:
+            name = db.get(Athlete, first).user.full_name
+        assert sheet[4][1].value == name
+        assert ("Заменена" in sheet[2][0].value) == (version == 1)
+    assert (
+        client.get(
+            f"/api/exports/protocol/{cid}.pdf?version=7", headers=h["athlete"]
+        ).status_code
+        == 404
+    )

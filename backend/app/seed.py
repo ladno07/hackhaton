@@ -11,6 +11,7 @@ from app.services.common import audit, age_at
 from app.services.ratings import recalculate
 from app.services.notifications import notify
 from app.services.reports import export_document
+from app.services.protocols import add_version
 
 DISCIPLINES = [
     ("Программирование алгоритмическое", "Алгоритмы"),
@@ -262,6 +263,7 @@ def seed(demo=False):
                         score=1000 - i * 97 - k * 10,
                     )
                 )
+            add_version(db, c, admin.id)
         db.flush()
         result = db.scalar(
             select(CompetitionResult).where(

@@ -112,10 +112,15 @@ class ResultIn(Strict):
     athlete_id: int
     place: int = Field(gt=0)
     score: float = Field(ge=0, allow_inf_nan=False)
+    team_name: str | None = Field(None, min_length=1, max_length=120)
 
 
 class ResultsIn(Strict):
     results: list[ResultIn] = Field(min_length=1)
+
+
+class ProtocolCorrectionIn(ResultsIn):
+    reason: str = Field(min_length=5, max_length=2000)
 
 
 class JudgeIn(Strict):
