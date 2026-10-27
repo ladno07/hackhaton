@@ -19,7 +19,7 @@ def competition(client, h, **overrides):
         deadline=today,
         location="Демо-арена",
         format="onsite",
-        level="regional",
+        status="regional",
         min_age=0,
         max_age=100,
         calendar_plan="Оренбургская область",
@@ -683,7 +683,7 @@ def test_age_group_directory_management(env):
         k: comp[k]
         for k in [
             "title", "discipline_id", "type_id", "start_date", "end_date",
-            "deadline", "location", "format", "level", "calendar_plan",
+            "deadline", "location", "format", "status", "calendar_plan",
             "calendar_number",
         ]
     }
@@ -740,3 +740,72 @@ def test_profile_sex(env):
     )
     assert res.json()["sex"] == "male"
     assert client.get("/api/auth/me", headers=h["athlete"]).json()["sex"] == "male"
+
+
+@pytest.mark.parametrize(
+    "status, type_id, level",
+    [
+        ("regional", 2, "regional"),
+        ("interregional", 1, "interregional"),
+        ("national", 1, "russian_championship"),
+        ("national", 3, "russian_championship"),
+        ("national", 2, "russian_junior"),
+        ("national", 4, "interregional"),
+    ],
+)
+def test_rating_level_from_status_and_type(env, status, type_id, level):
+    client, _, h, _ = env
+    plan = "Оренбургская область" if status == "regional" else "ЕКП"
+    comp = competition(
+        client, h["admin"], status=status, type_id=type_id, calendar_plan=plan
+    )
+    assert comp["status"] == status and comp["rating_level"] == level
+    meta = client.get("/api/metadata", headers=h["admin"]).json()
+    assert meta["rating_levels"][status][str(type_id)] == level
+
+
+def test_rating_level_follows_edit_and_new_type(env):
+    client, _, h, _ = env
+    assert (
+        client.post(
+            "/api/competitions",
+            headers=h["admin"],
+            json={"status": "national", "calendar_plan": "Оренбургская область"},
+        ).status_code
+        == 422
+    )
+    res = client.post(
+        "/api/competition-types",
+        headers=h["admin"],
+        json={"name": "Всероссийская спартакиада", "rating_class": "junior"},
+    )
+    assert res.status_code == 201 and res.json()["rating_class"] == "junior"
+    assert (
+        client.post(
+            "/api/competition-types",
+            headers=h["admin"],
+            json={"name": "Неизвестный", "rating_class": "elite"},
+        ).status_code
+        == 422
+    )
+    comp = competition(client, h["admin"])
+    assert comp["rating_level"] == "regional"
+    body = {
+        k: comp[k]
+        for k in [
+            "title", "discipline_id", "start_date", "end_date", "deadline",
+            "location", "format", "calendar_number",
+        ]
+    }
+    res = client.put(
+        f"/api/competitions/{comp['id']}",
+        headers=h["admin"],
+        json={
+            **body,
+            "type_id": res.json()["id"],
+            "status": "national",
+            "calendar_plan": "ЕКП",
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["rating_level"] == "russian_junior"

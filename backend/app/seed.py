@@ -34,6 +34,13 @@ AGE_GROUPS = [
     ("Мужчины", "male", 18, 100),
     ("Женщины", "female", 18, 100),
 ]
+# Rating class of the type decides the rating level of national competitions.
+COMPETITION_TYPES = [
+    ("Чемпионат", "main"),
+    ("Первенство", "junior"),
+    ("Кубок", "main"),
+    ("Турнир", "other"),
+]
 FEMALE_NAMES = {
     "Арина", "Анна", "Алиса", "Вера", "Дарья", "Ева", "Мирослава", "Полина", "София"
 }
@@ -63,10 +70,9 @@ def seed(demo=False):
         if not db.scalar(select(CompetitionType.id)):
             db.add_all(
                 [
-                    CompetitionType(id=i + 1, name=n)
-                    for i, n in enumerate(
-                        ["Чемпионат", "Первенство", "Кубок", "Турнир"]
-                    )
+                    # ids from the sequence, so the federation can add types later
+                    CompetitionType(name=n, rating_class=c)
+                    for n, c in COMPETITION_TYPES
                 ]
             )
         if not db.scalar(select(AgeGroup.id)):
@@ -220,13 +226,14 @@ def seed(demo=False):
                     "Демо · Кубок регионов по алгоритмам",
                 ][k],
                 discipline_id=1,
-                type_id=1,
+                type_id=1 if k == 0 else 3,
                 start_date=today - timedelta(days=days),
                 end_date=today - timedelta(days=days),
                 deadline=today - timedelta(days=days + 2),
                 location="Оренбург · Демо-арена",
                 format="onsite",
-                level="regional" if k == 0 else "interregional",
+                status="regional" if k == 0 else "interregional",
+                rating_level="regional" if k == 0 else "interregional",
                 calendar_plan="Оренбургская область" if k == 0 else "ЕКП",
                 calendar_number=f"ДЕМО-{k + 1}",
                 state="published",
@@ -292,7 +299,8 @@ def seed(demo=False):
                 if i % 2 == 0
                 else "Онлайн-платформа",
                 format=["onsite", "online", "hybrid"][i % 3],
-                level="regional",
+                status="regional",
+                rating_level="regional",
                 calendar_plan="Оренбургская область",
                 calendar_number=f"ДЕМО-{i + 10}",
                 state="open",

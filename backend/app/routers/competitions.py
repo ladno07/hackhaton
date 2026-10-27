@@ -13,13 +13,13 @@ from app.schemas import (
     Decision,
     ResultsIn,
     JudgeIn,
-    NameIn,
+    CompetitionTypeIn,
     AgeGroupIn,
 )
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify, admins, athlete_audience
-from app.services.ratings import recalculate
+from app.services.ratings import recalculate, rating_level
 from app.services.age_groups import (
     age_check,
     age_error,
@@ -79,6 +79,7 @@ def competition_view(db, comp, actor):
     data["age_groups"] = [group_view(g) for g in groups]
     data["regulation_file"] = regulation_info(db, comp.id)
     data["discipline"] = db.get(Discipline, comp.discipline_id).short_name
+    data["type"] = db.get(CompetitionType, comp.type_id).name
     data["participants"] = len(
         db.scalars(
             select(CompetitionApplication.id).where(
@@ -126,9 +127,10 @@ def create(
     db: Session = Depends(get_db),
 ):
     require(db, Discipline, data.discipline_id)
-    require(db, CompetitionType, data.type_id)
+    kind = require(db, CompetitionType, data.type_id)
     obj = Competition(
         **data.model_dump(exclude={"regulation_url", "age_group_ids"}),
+        rating_level=rating_level(data.status, kind.rating_class),
         regulation_url=str(data.regulation_url) if data.regulation_url else None,
     )
     db.add(obj)
@@ -149,9 +151,10 @@ def update(
     if obj.state != "draft":
         raise HTTPException(409, "Редактировать можно только черновик")
     require(db, Discipline, data.discipline_id)
-    require(db, CompetitionType, data.type_id)
+    kind = require(db, CompetitionType, data.type_id)
     for k, v in data.model_dump(exclude={"regulation_url", "age_group_ids"}).items():
         setattr(obj, k, v)
+    obj.rating_level = rating_level(data.status, kind.rating_class)
     obj.regulation_url = str(data.regulation_url) if data.regulation_url else None
     set_groups(db, obj, data)
     audit(db, actor, "Изменение соревнования", obj)
@@ -529,7 +532,8 @@ def history(
             "title": c.title,
             "start_date": c.start_date,
             "discipline_id": c.discipline_id,
-            "level": c.level,
+            "status": c.status,
+            "rating_level": c.rating_level,
         }
         for r, c in db.execute(
             select(CompetitionResult, Competition)
@@ -559,9 +563,11 @@ def assignments(
 
 @router.post("/competition-types", status_code=201)
 def add_type(
-    data: NameIn, actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db)
+    data: CompetitionTypeIn,
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
 ):
-    obj = CompetitionType(name=data.name)
+    obj = CompetitionType(**data.model_dump())
     db.add(obj)
     audit(db, actor, "Создание типа соревнования", obj)
     return row(obj)

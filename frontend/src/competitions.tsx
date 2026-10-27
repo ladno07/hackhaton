@@ -32,6 +32,7 @@ import {
   formats,
   groupLabel,
   levels,
+  statuses,
   today,
 } from "./lib";
 import { Button } from "./components/ui/button";
@@ -189,7 +190,7 @@ export function CompetitionForm({ initial, onSaved }: any) {
             "deadline",
             "location",
             "format",
-            "level",
+            "status",
             "min_age",
             "max_age",
             "calendar_plan",
@@ -213,7 +214,7 @@ export function CompetitionForm({ initial, onSaved }: any) {
           deadline: today(),
           location: "Оренбург",
           format: "onsite",
-          level: "regional",
+          status: "regional",
           min_age: 0,
           max_age: 100,
           age_group_ids: [],
@@ -227,6 +228,7 @@ export function CompetitionForm({ initial, onSaved }: any) {
     (g: any) => !g.discipline_id || g.discipline_id === v.discipline_id,
   );
   const picked = groups.filter((g: any) => v.age_group_ids.includes(g.id));
+  const ratingLevel = meta.data?.rating_levels?.[v.status]?.[v.type_id];
   const field = (k: string, label: string, type = "text", props: any = {}) => (
     <Field label={label}>
       <input
@@ -313,13 +315,16 @@ export function CompetitionForm({ initial, onSaved }: any) {
             ))}
           </select>
         </Field>
-        <Field label="Уровень">
+        <Field
+          label="Статус"
+          hint={ratingLevel && "Уровень для рейтинга: " + levels[ratingLevel]}
+        >
           <select
-            value={v.level}
+            value={v.status}
             onChange={(e) =>
               setV({
                 ...v,
-                level: e.target.value,
+                status: e.target.value,
                 calendar_plan:
                   e.target.value === "regional"
                     ? "Оренбургская область"
@@ -327,7 +332,7 @@ export function CompetitionForm({ initial, onSaved }: any) {
               })
             }
           >
-            {Object.entries(levels).map(([k, s]) => (
+            {Object.entries(statuses).map(([k, s]) => (
               <option value={k} key={k}>
                 {s}
               </option>
@@ -515,7 +520,8 @@ export function Competitions() {
                   <div className="competition-main">
                     <div className="competition-tags">
                       <span className="discipline-label">{c.discipline}</span>
-                      <span>{levels[c.level]}</span>
+                      <span>{statuses[c.status]}</span>
+                      <span>{c.type}</span>
                     </div>
                     <h2>{c.title.replace("Демо · ", "")}</h2>
                     <div className="competition-meta">
@@ -747,8 +753,14 @@ export function CompetitionDetail() {
                   <strong>{formats[comp.format]}</strong>
                 </div>
                 <div>
-                  <span>Уровень</span>
-                  <strong>{levels[comp.level]}</strong>
+                  <span>Статус и тип</span>
+                  <strong>
+                    {statuses[comp.status]} · {comp.type}
+                  </strong>
+                </div>
+                <div>
+                  <span>Уровень для рейтинга</span>
+                  <strong>{levels[comp.rating_level]}</strong>
                 </div>
                 <div>
                   <span>

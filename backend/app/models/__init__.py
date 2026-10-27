@@ -131,9 +131,13 @@ class LinkHistory(Base):
 
 
 class CompetitionType(Base):
+    """rating_class: main (чемпионат, кубок), junior (первенство), other."""
+
     __tablename__ = "competition_types"
+    __table_args__ = (CheckConstraint("rating_class IN ('main','junior','other')"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
+    rating_class: Mapped[str] = mapped_column(String(20), default="other")
 
 
 class Competition(Base):
@@ -142,8 +146,9 @@ class Competition(Base):
         CheckConstraint("end_date >= start_date"),
         CheckConstraint("min_age <= max_age"),
         CheckConstraint("state IN ('draft','open','closed','published')"),
+        CheckConstraint("status IN ('regional','interregional','national')"),
         CheckConstraint(
-            "level IN ('regional','interregional','russian_championship','russian_junior')"
+            "rating_level IN ('regional','interregional','russian_championship','russian_junior')"
         ),
         CheckConstraint("format IN ('onsite','online','hybrid')"),
     )
@@ -156,7 +161,9 @@ class Competition(Base):
     deadline: Mapped[date] = mapped_column(Date)
     location: Mapped[str] = mapped_column(String(200))
     format: Mapped[str] = mapped_column(String(20))
-    level: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))
+    # derived from status + type, see services.ratings.rating_level
+    rating_level: Mapped[str] = mapped_column(String(40))
     min_age: Mapped[int] = mapped_column(Integer, default=0)
     max_age: Mapped[int] = mapped_column(Integer, default=100)
     calendar_plan: Mapped[str] = mapped_column(String(100))
