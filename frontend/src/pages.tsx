@@ -48,6 +48,7 @@ import { ProfileDocuments, ProfileSportsSummary } from "./profile-documents";
 const attentionGroups: [string, string, string][] = [
   ["applications", "Заявки на соревнования", "/competitions"],
   ["rank_applications", "Заявки на разряды и категории", "/ranks"],
+  ["appeals", "Апелляции", "/appeals"],
   ["ranks", "Истекающие разряды", "/registry"],
   ["categories", "Истекающие судейские категории", "/registry"],
   ["reports", "Сроки отчётов", "/settings"],

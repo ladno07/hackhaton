@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.db import engine
 from app.routers import auth, registry, staff, competitions, federation, reports, public, telegram
-from app.routers import awards, competition_teams, documents, indicators, passports
+from app.routers import appeals, awards, competition_teams, documents, indicators, passports
 from app.services.notifications import worker
 
 
@@ -81,6 +81,7 @@ for router in [
     reports.router,
     indicators.router,
     awards.router,
+    appeals.router,
     public.router,
 ]:
     app.include_router(router, prefix="/api")

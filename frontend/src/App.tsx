@@ -32,6 +32,7 @@ import {
   BookOpen,
   Route as RouteIcon,
   Award,
+  Scale,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames } from "./lib";
@@ -51,6 +52,7 @@ import {
 import { Competitions, CompetitionDetail } from "./competitions";
 import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 import { GovernorAwards } from "./awards";
+import { Appeals } from "./appeals";
 
 import {
   AthleteProfileView,
@@ -358,6 +360,12 @@ const navigation = [
     roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
+    to: "/appeals",
+    label: "Апелляции и нарушения",
+    icon: Scale,
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
+  },
+  {
     to: "/awards",
     label: "Премии Губернатора",
     icon: Award,
@@ -640,6 +648,7 @@ export default function App() {
         <Route path="help" element={<Help />} />
         <Route path="ranks" element={<Ranks />} />
         <Route path="ratings" element={<Ratings />} />
+        <Route path="appeals" element={<Appeals />} />
         <Route
           path="awards"
           element={

@@ -147,6 +147,66 @@ def awards_demo(db, admin, year):
     )
 
 
+def appeals_demo(db, admin, coach_user, athletes, cup):
+    """A warning the demo athlete may still appeal, a pending coach appeal on
+    the cup protocol and a rejected one; no suspensions, ratings stay intact."""
+    today = date.today()
+    db.add_all(
+        [
+            Violation(
+                athlete_id=athletes[0].id,
+                kind="conduct",
+                occurred_on=today - timedelta(days=1),
+                description="Демо · Использование телефона в зоне соревнований",
+                sanction="warning",
+                created_by=admin.id,
+            ),
+            Violation(
+                athlete_id=athletes[4].id,
+                competition_id=cup.id,
+                kind="rules",
+                occurred_on=cup.start_date,
+                description="Демо · Опоздание к началу тура без уважительной причины",
+                sanction="warning",
+                created_by=admin.id,
+                created_at=now() - timedelta(days=29),
+            ),
+        ]
+    )
+    results = {
+        r.athlete_id: r
+        for r in db.scalars(
+            select(CompetitionResult).where(CompetitionResult.competition_id == cup.id)
+        )
+    }
+    for athlete, by, role, status in [
+        (athletes[1], coach_user, "coach", "pending"),
+        (athletes[3], athletes[3].user, "athlete", "rejected"),
+    ]:
+        db.add(
+            Appeal(
+                athlete_id=athlete.id,
+                subject="result",
+                competition_id=cup.id,
+                result_id=results[athlete.id].id,
+                protocol_version=1,
+                reason="Демо · Решение задачи F не засчитано, хотя прошло все тесты "
+                "в системе проверки (посылка 14:32)",
+                request="Пересчитать баллы и место",
+                submitted_by=by.id,
+                submitted_role=role,
+                status=status,
+                decision="Демо · Посылка проверена повторно, решение превысило лимит времени"
+                if status == "rejected"
+                else "",
+                decided_by=admin.id if status == "rejected" else None,
+                decided_at=now() - timedelta(days=27) if status == "rejected" else None,
+                # the pending one is fresh so the federation's term has not run out
+                created_at=now() - timedelta(days=29 if status == "rejected" else 1),
+            )
+        )
+
+
 def seed(demo=False):
     with SessionLocal() as db:
         for k, v in ROLES:
@@ -398,6 +458,7 @@ def seed(demo=False):
                     )
                 )
             add_version(db, c, admin.id)
+            cup = c
         db.flush()
         result = db.scalar(
             select(CompetitionResult).where(
@@ -519,6 +580,7 @@ def seed(demo=False):
         )
         indicators_demo(db, admin, year - 1)
         awards_demo(db, admin, (today - timedelta(days=30)).year)
+        appeals_demo(db, admin, trainer, athletes, cup)
         ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(

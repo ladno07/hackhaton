@@ -3425,3 +3425,24 @@ td a:hover {
   color: white;
 }
 .coach-chat-send:hover:not(:disabled) { background: var(--color-accent-hover); }
+/* appeals and violations */
+.inline-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fsp-neutral-600);
+  margin: 0 0 15px;
+}
+.appeal-text {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0 0 12px;
+  white-space: pre-line;
+}
+.appeal-reason {
+  min-width: 220px;
+  max-width: 360px;
+  white-space: normal;
+}
+.appeal-row td {
+  background: var(--fsp-primary-50);
+}
