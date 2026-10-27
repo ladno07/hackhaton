@@ -15,6 +15,20 @@ class Settings(BaseSettings):
     mail_from: str = "federation@orencode.test"
     notifications_worker: bool = True
     pdf_font: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    # Letterhead of official documents. Requisites are fictitious demo values:
+    # set the real ones through the environment.
+    fsp_name: str = (
+        "Региональное отделение Общероссийской общественной организации "
+        "«Федерация спортивного программирования» в Оренбургской области"
+    )
+    fsp_short_name: str = "ФСП Оренбургской области"
+    fsp_requisites: str = (
+        "460000, г. Оренбург, ул. Демонстрационная, д. 1 · ИНН 5600000000 · "
+        "ОГРН 1005600000000 · federation@orencode.test"
+    )
+    fsp_city: str = "г. Оренбург"
+    fsp_head_position: str = "Председатель"
+    fsp_head_name: str = ""
 
 
 settings = Settings()
