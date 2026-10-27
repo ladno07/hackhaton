@@ -83,3 +83,34 @@ def test_telegram_chat_goes_only_to_athlete(env, monkeypatch):
         deliver(db, api)
         assert not any("Уже неактуальное" in m[1] for m in api.messages)
         assert len(db.scalars(select(CoachChatMessage)).all()) == 3
+
+
+def test_link_changes_use_readable_messages_on_site_and_telegram(env, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "telegram_bot_token", "fake-token")
+    monkeypatch.setattr(settings, "telegram_bot_username", "fsp_test_bot")
+    client, factory, headers, users = env
+    link = request_link(client, headers, users)
+    with factory() as db:
+        connect(db, users["athlete"]["id"], 101)
+        connect(db, users["coach"]["id"], 102)
+    api = FakeTelegram()
+    for status, title in (("active", "Связь подтверждена"), ("paused", "Связь приостановлена"),
+                          ("ended", "Связь завершена")):
+        response = client.patch(f"/api/links/{link}", headers=headers["athlete"], json={"status": status})
+        assert response.status_code == 200
+        for role in ("athlete", "coach"):
+            notices = client.get("/api/notifications", headers=headers[role]).json()
+            notice = next(n for n in notices if n["event_key"].startswith(f"link-change:{link}:") and n["title"] == title)
+            counterpart = "athlete" if role == "coach" else "coach"
+            assert users[counterpart]["full_name"] in notice["body"]
+            assert users[role]["full_name"] not in notice["body"]
+            assert "Направление:" in notice["body"]
+            assert not {"active", "paused", "ended"}.intersection(notice["body"].splitlines())
+        with factory() as db:
+            deliver(db, api)
+        assert title in api.messages[-1][1]
+        assert api.messages[-1][0] == 101
+        assert users["coach"]["full_name"] in api.messages[-1][1]
+        assert users["athlete"]["full_name"] not in api.messages[-1][1]
+    assert len(api.messages) == 3

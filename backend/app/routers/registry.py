@@ -15,7 +15,7 @@ from app.schemas import (
 )
 from app.security import Actor, current_actor, allow
 from app.services.common import *
-from app.services.notifications import notify
+from app.services.notifications import notify, link_change_content
 from app.services.path import personal_path
 from app.services.ratings import rating_levels
 from app.services.athlete_ids import public_athlete_id
@@ -268,6 +268,8 @@ def links(
             "athlete": db.get(Athlete, x.athlete_id).user.full_name,
             "athlete_public_id": public_athlete_id(x.athlete_id),
             "coach": db.get(Coach, x.coach_id).user.full_name,
+            "athlete_sex": db.get(Athlete, x.athlete_id).user.sex,
+            "coach_sex": db.get(Coach, x.coach_id).user.sex,
             "history": [
                 row(h)
                 for h in db.scalars(
@@ -332,13 +334,10 @@ def change_link(
     link.status = data.status
     db.add(LinkHistory(link_id=link.id, actor_id=actor.user.id, status=data.status))
     audit(db, actor, "Изменение связи с тренером", link, {"status": data.status})
-    notify(
-        db,
-        [athlete.user_id, coach.user_id],
-        "Связь с тренером изменена",
-        data.status,
-        f"link-change:{link.id}:{now().isoformat()}",
-    )
+    key = f"link-change:{link.id}:{now().isoformat()}"
+    for user_id, recipient_role in ((athlete.user_id, "athlete"), (coach.user_id, "coach")):
+        title, body = link_change_content(db, link, data.status, recipient_role)
+        notify(db, [user_id], title, body, key)
     return row(link)
 
 

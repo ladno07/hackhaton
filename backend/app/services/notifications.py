@@ -16,6 +16,23 @@ from app.services.telegram_link import utc
 logger = logging.getLogger(__name__)
 
 
+def link_change_content(db, link, status, recipient_role):
+    title = {
+        "active": "Связь подтверждена",
+        "paused": "Связь приостановлена",
+        "ended": "Связь завершена",
+    }[status]
+    discipline = db.get(Discipline, link.discipline_id)
+    if recipient_role == "coach":
+        athlete = db.get(Athlete, link.athlete_id)
+        participant = f"Спортсмен: {athlete.user.full_name}"
+    else:
+        coach = db.get(Coach, link.coach_id)
+        participant = f"Тренер: {coach.user.full_name}"
+    body = f"{participant}\nНаправление: {discipline.short_name}"
+    return title, body
+
+
 def is_registration_notice(notice):
     parts = notice.event_key.split(":")
     return parts[0] == "competition-open" or parts[:2] in (

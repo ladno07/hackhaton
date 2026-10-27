@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, errorText } from "./lib";
-import { useAuth, useToast } from "./state";
+import { useAuth, useData, useToast } from "./state";
+import { chatDay, chatDayLabel, chatPerson } from "./coach-chat-format";
+import { CoachChatHistory } from "./coach-chat-history";
 import { Dialog } from "./components/ui/dialog";
 import { Button } from "./components/ui/button";
 import { State } from "./components/shared";
@@ -21,11 +23,14 @@ function resizeComposer(input: HTMLTextAreaElement) {
 
 export function CoachChat({ linkId, onClose }: { linkId: number; onClose: () => void }) {
   const { role, user } = useAuth();
+  const links = useData("/links");
+  const link = links.data?.find((item: any) => item.id === linkId);
+  const person = chatPerson((role === "athlete" ? link?.coach : link?.athlete) || "",
+    role === "athlete" ? link?.coach_sex : link?.athlete_sex);
   const toast = useToast();
   const qc = useQueryClient();
   const [body, setBody] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
-  const end = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (input.current) resizeComposer(input.current);
   }, [body]);
@@ -54,8 +59,6 @@ export function CoachChat({ linkId, onClose }: { linkId: number; onClose: () => 
     refetchInterval: 5000,
     retry: false,
   });
-  const latestId = messages.data?.pages[0]?.[0]?.id;
-  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [latestId]);
   const send = useMutation({
     mutationFn: async (text: string) => api.post(`/links/${linkId}/messages`, { body: text }),
     onSuccess: () => {
@@ -69,24 +72,31 @@ export function CoachChat({ linkId, onClose }: { linkId: number; onClose: () => 
   const canSend = !!body.trim() && !send.isPending && !messages.error && !messages.isPending;
   const submit = () => { if (canSend) send.mutate(body.trim()); };
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={role === "athlete" ? "Чат с тренером" : "Чат со спортсменом"} wide>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={person.title} wide>
       <p className="muted">Уведомления о сообщениях тренера приходят в Telegram только спортсмену, если он подключил бота.</p>
       <State query={messages}>
-        <div className="coach-chat-messages" role="log" aria-label="Переписка">
+        <CoachChatHistory newestId={items.at(-1)?.id} oldestId={items[0]?.id}
+          ownLatest={items.at(-1)?.sender_id === user?.id}>
           {messages.hasNextPage && <Button variant="ghost" disabled={messages.isFetchingNextPage}
             onClick={() => messages.fetchNextPage()}>Загрузить предыдущие сообщения</Button>}
           {!items.length && <p className="muted">Сообщений пока нет. Начните переписку.</p>}
-          {items.map((message: any) => (
-            <article key={message.id} className={`coach-chat-message ${message.sender_id === user?.id ? "coach-chat-own" : ""}`}>
-              <small>{message.sender_id === user?.id ? "Вы" : message.sender_role === "coach" ? "Тренер" : "Спортсмен"}
+          {items.map((message: any, index: number) => (
+            <Fragment key={message.id}>
+              {(index === 0 || chatDay(items[index - 1].created_at) !== chatDay(message.created_at)) && (
+                <div className="coach-chat-day" data-chat-day={chatDay(message.created_at)}>
+                  <span>{chatDayLabel(chatDay(message.created_at))}</span>
+                </div>
+              )}
+            <article data-chat-day={chatDay(message.created_at)} className={`coach-chat-message ${message.sender_id === user?.id ? "coach-chat-own" : ""}`}>
+              <small>{message.sender_id === user?.id ? "Вы" : person.label}
                 {" · "}<time dateTime={message.created_at}>{new Date(message.created_at).toLocaleString("ru-RU", {
-                  day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+                  hour: "2-digit", minute: "2-digit",
                 })}</time></small>
               <p>{message.body}</p>
             </article>
+            </Fragment>
           ))}
-          <div ref={end} />
-        </div>
+        </CoachChatHistory>
       </State>
       <form className="coach-chat-composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <textarea ref={input} id="coach-chat-body" aria-label="Сообщение" value={body}

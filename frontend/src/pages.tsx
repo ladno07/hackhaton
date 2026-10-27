@@ -30,7 +30,7 @@ import { chartColors, date, download, formats, roleNames, sexNames, today } from
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
-import { TelegramConnection, TelegramDeliveryStatus } from "./telegram";
+import { TelegramConnection } from "./telegram";
 import {
   Badge,
   Empty,
@@ -892,7 +892,7 @@ export function Coaching() {
   return (
     <>
       <PageTitle
-        title={role === "coach" ? "Мои спортсмены" : "Связи с тренерами"}
+        title={role === "coach" ? "Связь со спортсменами" : "Связи с тренерами"}
         description={role === "athlete"
           ? "Подтвердите заявку тренера — первым действием в строке появится чат с ним."
           : "Привязка действует только после подтверждения спортсменом. История изменений сохраняется."}
@@ -1106,13 +1106,12 @@ export function Notifications() {
                     </Link>
                   )}
                   <small>
-                    {date(n.created_at)} ·{" "}
-                    {n.mailed_at
-                      ? "Отправлено на почту"
-                      : n.last_error
-                        ? "Ошибка отправки; повторим автоматически"
-                        : "В очереди на отправку"}
-                    {role !== "ministry" && <TelegramDeliveryStatus delivery={n.telegram_delivery} />}
+                    <time dateTime={n.created_at}>
+                      {new Date(n.created_at).toLocaleString("ru-RU", {
+                        day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </time>
                   </small>
                 </div>
                 {!n.read_at && (
