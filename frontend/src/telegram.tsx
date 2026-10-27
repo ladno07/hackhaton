@@ -47,7 +47,7 @@ export function TelegramConnection() {
               catch { setCopyStatus("Выделите код и скопируйте его вручную"); }
             }}>Скопировать код</Button>
             <p>{remaining ? `Код действует ещё ${countdown}.` : "Код истёк. Получите новый."} {copyStatus}</p>
-            <p>2. <a href={invite.bot_url} target="_blank" rel="noreferrer">Откройте бота в Telegram</a> и отправьте ему эти 8 цифр.</p>
+            <p>2. Откройте бота <a className="text-link" style={{ fontSize: 14 }} href={invite.bot_url} target="_blank" rel="noreferrer">@{invite.bot_url.split("/").pop()}</a> в Telegram и отправьте ему эти 8 цифр.</p>
             <p>3. Проверьте имя аккаунта и нажмите в боте «Подтвердить подключение».</p>
             <small>Не передавайте код другим людям. Новый код отменяет предыдущий.</small>
           </div>}
