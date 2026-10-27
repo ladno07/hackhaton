@@ -10,7 +10,8 @@ from app.security import password_hash, Actor
 from app.services.common import audit, age_at
 from app.services.ratings import recalculate
 from app.services.notifications import notify
-from app.services.reports import export_document
+from app.config import settings
+from app.services.documents import OfficialDocument, export_document
 from app.services.protocols import add_version
 
 DISCIPLINES = [
@@ -364,18 +365,22 @@ def seed(demo=False):
             else:
                 participants = f"{c.min_age}–{c.max_age} лет на дату старта"
             pdf = export_document(
-                "Положение о проведении соревнования",
-                ["Раздел", "Содержание"],
-                [
-                    ["Наименование", c.title],
-                    ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
-                    ["Место", c.location],
-                    ["Участники", participants],
-                    ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
-                    ["Документ", "Демонстрационный образец, не имеет силы"],
-                ],
+                OfficialDocument(
+                    kind="Положение",
+                    title=f"о проведении соревнования «{c.title}»",
+                    headers=["Раздел", "Содержание"],
+                    rows=[
+                        ["Наименование", c.title],
+                        ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
+                        ["Место", c.location],
+                        ["Участники", participants],
+                        ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
+                        ["Документ", "Демонстрационный образец, не имеет силы"],
+                    ],
+                    number=c.calendar_number,
+                    approve=(settings.fsp_head_position, settings.fsp_head_name),
+                ),
                 "pdf",
-                c.calendar_number,
             )
             db.add(
                 CompetitionRegulation(
