@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.db import engine
 from app.routers import auth, registry, staff, competitions, federation, reports, public
-from app.routers import competition_teams, passports
+from app.routers import competition_teams, passports, documents
 from app.services.notifications import worker
 
 
@@ -40,6 +40,7 @@ async def public_privacy_headers(request, call_next):
             "/api/public/",
             "/api/auth/",
             "/api/my/profile-visibility",
+            "/api/my/documents",
             "/api/athlete-profiles/",
             "/api/results",
         )
@@ -74,6 +75,7 @@ for router in [
     competitions.router,
     competition_teams.router,
     passports.router,
+    documents.router,
     federation.router,
     reports.router,
     public.router,

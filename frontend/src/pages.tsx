@@ -42,6 +42,7 @@ import {
 } from "./components/shared";
 import { PassportPanel } from "./passport-panel";
 import { auditDetails, auditEntity } from "./audit-details";
+import { ProfileDocuments, ProfileSportsSummary } from "./profile-documents";
 const attentionGroups: [string, string, string][] = [
   ["applications", "Заявки на соревнования", "/competitions"],
   ["rank_applications", "Заявки на разряды и категории", "/ranks"],
@@ -582,6 +583,9 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             onChange={(e) => change("full_name", e.target.value)}
           />
         </Field>
+        <Field label="Дата рождения" hint="Указана при регистрации">
+          <input type="date" readOnly value={athlete.birth_date || ""} />
+        </Field>
         <Field label="Пол" hint="Нужен для возрастных групп соревнований">
           <select value={v.sex} onChange={(e) => change("sex", e.target.value)}>
             <option value="">Не указан</option>
@@ -788,6 +792,22 @@ export function Profile() {
   const { user, role } = useAuth();
   if (role === "coach" || role === "judge")
     return <StaffProfile kind={role} id={user[role + "_id"]} />;
+  if (role === "admin" || role === "ministry")
+    return (
+      <>
+        <PageTitle title="Мой профиль" description="Данные вашей учётной записи и документы." />
+        <div className="profile-layout">
+          <section className="panel form-panel">
+            <Field label="ФИО"><input readOnly value={user.full_name} /></Field>
+            <Field label="Электронная почта"><input readOnly value={user.email} /></Field>
+            <Field label="Дата рождения"><input readOnly type="date" value={user.birth_date || ""} /></Field>
+            <Field label="Активный кабинет"><input readOnly value={roleNames[role]} /></Field>
+            <Field label="Доступные роли"><input readOnly value={user.roles.map((r: string) => roleNames[r] || r).join(", ")} /></Field>
+          </section>
+          <aside><ProfileDocuments user={user} /></aside>
+        </div>
+      </>
+    );
   return <AthleteProfile user={user} />;
 }
 
@@ -808,6 +828,7 @@ function AthleteProfile({ user }: any) {
         </section>
         <aside>
           <PassportPanel user={user} />
+          {q.data && <ProfileSportsSummary athlete={q.data} />}
           <section className="panel info-card section-gap">
             <h2>Мой ID спортсмена</h2>
             <p>
@@ -836,21 +857,7 @@ function AthleteProfile({ user }: any) {
               Скопировать ID
             </Button>
           </section>
-          <section className="panel info-card">
-            <ShieldCheck className="text-primary" />
-            <h2>Согласия и документы</h2>
-            <p>
-              Согласие на обработку персональных данных сохранено{" "}
-              {date(user.consent_at)}.
-            </p>
-            <small>Версия {user.consent_version}</small>
-            {user.guardian_name && (
-              <p>
-                Представитель: {user.guardian_name}. Согласие:{" "}
-                {date(user.guardian_consent_at)}.
-              </p>
-            )}
-          </section>
+          <ProfileDocuments user={user} />
           <section className="panel info-card section-gap">
             <h2>Чистый спорт</h2>
             <p>Информация об антидопинговом образовании и прохождении курса.</p>

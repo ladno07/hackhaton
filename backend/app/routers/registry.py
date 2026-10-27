@@ -153,7 +153,8 @@ def athlete_detail(
     actor: Actor = Depends(current_actor),
     db: Session = Depends(get_db),
 ):
-    return athlete_view(db, can_athlete(db, actor, athlete_id))
+    athlete = can_athlete(db, actor, athlete_id)
+    return {**athlete_view(db, athlete), "birth_date": athlete.user.birth_date}
 
 
 @router.get("/athletes/{athlete_id}/path")
