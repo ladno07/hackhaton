@@ -1,0 +1,70 @@
+/* Дизайн-система ФСП: токены на основе fsp-russia.ru */
+:root {
+  /* Синий ФСП */
+  --fsp-primary-50: #efedff;
+  --fsp-primary-100: #dcd8ff;
+  --fsp-primary-200: #b9b1ff;
+  --fsp-primary-300: #8a7fff;
+  --fsp-primary-400: #6a5dff;
+  --fsp-primary-500: #402fff;
+  --fsp-primary-600: #3323d9;
+  --fsp-primary-700: #2719ad;
+  --fsp-primary-900: #221f73;
+
+  /* Нейтральные */
+  --fsp-neutral-0: #ffffff;
+  --fsp-neutral-50: #f6f6f7;
+  --fsp-neutral-100: #ededed;
+  --fsp-neutral-200: #d9d9d9;
+  --fsp-neutral-300: #c7c7ca;
+  --fsp-neutral-400: #9b9c9e;
+  --fsp-neutral-500: #838388;
+  --fsp-neutral-600: #5f5f66;
+  --fsp-neutral-700: #3d3e42;
+  --fsp-neutral-800: #2d2e37;
+  --fsp-neutral-900: #1b1c21;
+
+  /* Статусы: заливка, текст на светлом, светлый фон */
+  --fsp-success-500: #12a150;
+  --fsp-success-700: #0b7a3b;
+  --fsp-success-50: #e6f6ec;
+  --fsp-warning-500: #ff9900;
+  --fsp-warning-700: #9a5a00;
+  --fsp-warning-50: #fff3e0;
+  --fsp-danger-500: #ec1d35;
+  --fsp-danger-700: #c4122a;
+  --fsp-danger-50: #fde8ea;
+
+  /* Семантические алиасы */
+  --color-bg: var(--fsp-neutral-100);
+  --color-surface: var(--fsp-neutral-0);
+  --color-surface-muted: var(--fsp-neutral-50);
+  --color-text: var(--fsp-neutral-900);
+  --color-text-secondary: var(--fsp-neutral-600);
+  --color-text-placeholder: var(--fsp-neutral-500);
+  --color-border: var(--fsp-neutral-200);
+  --color-accent: var(--fsp-primary-500);
+  --color-accent-hover: var(--fsp-primary-700);
+  --color-focus-ring: var(--fsp-primary-200);
+
+  /* Шрифты */
+  --font-sans: Inter, "Segoe UI", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* Скругления */
+  --radius-xs: 2px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 100px;
+
+  /* Отступы, шаг 4 px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+}
