@@ -1217,6 +1217,31 @@ td a:hover {
   background: #b63345;
   box-shadow: 0 0 0 4px #fbf0f2;
 }
+.attention-group-title {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 23px 0;
+  padding-top: 12px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a909c;
+}
+.attention-group-title b {
+  color: #b44354;
+}
+.attention-group a.deadline-row:hover h3 {
+  color: #2a3140;
+}
+.attention-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 23px 8px;
+  font-size: 9px;
+  color: #b44354;
+}
 .deadline-row h3 {
   font-size: 10px;
   line-height: 1.6;
@@ -2197,7 +2222,9 @@ td a:hover {
     gap: 18px;
   }
   .deadline-row,
-  .upcoming-row {
+  .upcoming-row,
+  .attention-group-title,
+  .attention-more {
     margin-inline: 18px;
   }
   .upcoming-row {
