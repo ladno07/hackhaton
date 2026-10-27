@@ -17,10 +17,12 @@ from app.schemas import (
     JudgeIn,
     CompetitionTypeIn,
     AgeGroupIn,
+    CompetitionScheduleIn,
 )
 from app.security import Actor, current_actor, allow
 from app.services.common import *
 from app.services.notifications import notify, admins, athlete_audience
+from app.services.competition_notifications import registration_recipients
 from app.services.ratings import recalculate, rating_level
 from app.services.competition_teams import expand_results
 from app.services.protocols import (
@@ -180,6 +182,52 @@ def remove(
     db.delete(obj)
 
 
+@router.patch("/competitions/{comp_id}/schedule")
+def change_schedule(
+    comp_id: int, data: CompetitionScheduleIn,
+    actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db),
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Расписание после публикации результатов менять нельзя")
+    if data.start_date < comp.deadline:
+        raise HTTPException(422, "Начало не может быть раньше дедлайна заявок")
+    previous = (comp.start_date, comp.end_date, comp.start_time, comp.timezone)
+    for key, value in data.model_dump().items():
+        setattr(comp, key, value)
+    if previous == (comp.start_date, comp.end_date, comp.start_time, comp.timezone):
+        return row(comp)
+    audience = set()
+    for application in db.scalars(select(CompetitionApplication).where(
+        CompetitionApplication.competition_id == comp.id, CompetitionApplication.status == "approved"
+    )):
+        athlete = db.get(Athlete, application.athlete_id)
+        if not age_check(db, comp, athlete)["eligible"]:
+            raise HTTPException(422, "Новая дата не соответствует возрасту допущенного участника")
+        audience.add(athlete.user_id)
+        audience.update(db.scalars(select(Coach.user_id).join(AthleteCoach, AthleteCoach.coach_id == Coach.id).where(
+            AthleteCoach.athlete_id == athlete.id, AthleteCoach.discipline_id == comp.discipline_id,
+            AthleteCoach.status == "active", Coach.archived_at.is_(None)
+        )))
+    for judge in db.scalars(select(Judge).join(CompetitionJudge, CompetitionJudge.judge_id == Judge.id).where(
+        CompetitionJudge.competition_id == comp.id
+    )):
+        if not db.scalar(select(JudgeCategory.id).where(JudgeCategory.judge_id == judge.id, JudgeCategory.expires_on >= comp.end_date)):
+            raise HTTPException(422, "Категория назначенного судьи не действует до новой даты окончания")
+        audience.add(judge.user_id)
+    comp.revision += 1
+    if comp.state != "draft":
+        notify(db, audience, "Изменилось расписание соревнования",
+               f"{comp.title}\n{comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}, "
+               f"{comp.start_time.strftime('%H:%M') if comp.start_time else 'время уточняется'} ({comp.timezone})",
+               f"competition-schedule:{comp.id}:{comp.revision}")
+        for notice in db.scalars(select(Notification).where(Notification.event_key == f"competition-schedule:{comp.id}:{comp.revision}")):
+            notice.telegram_context = {"schedule": [str(comp.start_date), str(comp.end_date), str(comp.start_time), comp.timezone],
+                                        "path": f"/competitions/{comp.id}"}
+    audit(db, actor, "Перенос расписания соревнования", comp, data.model_dump(mode="json"))
+    return row(comp)
+
+
 @router.patch("/competitions/{comp_id}/state")
 def set_state(
     comp_id: int,
@@ -206,7 +254,7 @@ def set_state(
     if data.state == "open":
         notify(
             db,
-            db.scalars(select(User.id)).all(),
+            registration_recipients(db, comp),
             "Открыта регистрация",
             comp.title,
             f"competition-open:{comp.id}:{comp.revision}",
@@ -310,7 +358,7 @@ async def upload_regulation(
         ).all()
         notify(
             db,
-            [u for a in athlete_ids for u in athlete_audience(db, a)],
+            [u for a in athlete_ids for u in athlete_audience(db, a, comp.discipline_id)],
             "Обновлено положение",
             comp.title,
             f"competition-regulation:{comp.id}:{comp.revision}",
@@ -426,12 +474,14 @@ def moderate(
     if comp.state == "published" or obj.status != "pending":
         raise HTTPException(409, "Заявка уже рассмотрена или протокол опубликован")
     obj.status, obj.comment = data.status, data.comment
+    obj.approved_at = now() if data.status == "approved" else None
     audit(db, actor, "Рассмотрение заявки", obj, data.model_dump())
     notify(
         db,
-        athlete_audience(db, obj.athlete_id),
+        athlete_audience(db, obj.athlete_id, comp.discipline_id),
         "Статус заявки изменён",
-        f"{comp.title}: {data.status}. {data.comment}",
+        f"{comp.title}: {'одобрена' if data.status == 'approved' else 'отклонена'}. {data.comment or ''}\n"
+        f"Даты соревнования: {comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}",
         f"application-decision:{obj.id}",
     )
     return row(obj)
@@ -513,7 +563,7 @@ def publish(
     for athlete_id in approved:
         notify(
             db,
-            athlete_audience(db, athlete_id),
+            athlete_audience(db, athlete_id, comp.discipline_id),
             "Опубликован протокол",
             comp.title,
             f"protocol:{comp.id}:{athlete_id}",
@@ -564,7 +614,7 @@ def correct(
     for athlete_id in current:
         notify(
             db,
-            athlete_audience(db, athlete_id),
+            athlete_audience(db, athlete_id, comp.discipline_id),
             "Протокол исправлен",
             f"{comp.title}: редакция {version.version}. {data.reason}",
             f"protocol:{comp.id}:{athlete_id}:v{version.version}",

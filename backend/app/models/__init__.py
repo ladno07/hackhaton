@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -14,6 +14,8 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    Time,
+    BigInteger,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
@@ -208,6 +210,8 @@ class Competition(Base):
     discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
     type_id: Mapped[int] = mapped_column(ForeignKey("competition_types.id"))
     start_date: Mapped[date] = mapped_column(Date)
+    start_time: Mapped[time | None] = mapped_column(Time)
+    timezone: Mapped[str] = mapped_column(String(80), default="Asia/Yekaterinburg", server_default="Asia/Yekaterinburg")
     end_date: Mapped[date] = mapped_column(Date)
     deadline: Mapped[date] = mapped_column(Date)
     location: Mapped[str] = mapped_column(String(200))
@@ -288,6 +292,7 @@ class CompetitionApplication(Base):
     submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(20), default="pending")
     comment: Mapped[str | None] = mapped_column(Text)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -427,6 +432,54 @@ class Notification(Base):
     mailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(Text)
+    telegram_context: Mapped[dict | None] = mapped_column(JSON)
+
+
+class TelegramLink(Base):
+    __tablename__ = "telegram_links"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    role: Mapped[str] = mapped_column(String(20), default="athlete")
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    baseline_id: Mapped[int] = mapped_column(Integer, default=0)
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TelegramLinkToken(Base):
+    __tablename__ = "telegram_link_tokens"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    chat_id: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class TelegramDelivery(Base):
+    __tablename__ = "telegram_deliveries"
+    __table_args__ = (UniqueConstraint("link_id", "notification_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    link_id: Mapped[int] = mapped_column(ForeignKey("telegram_links.id"))
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class TelegramCodeAttempt(Base):
+    __tablename__ = "telegram_code_attempts"
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class TelegramCursor(Base):
+    __tablename__ = "telegram_cursor"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    update_id: Mapped[int] = mapped_column(BigInteger, default=-1)
+    send_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditLog(Base):

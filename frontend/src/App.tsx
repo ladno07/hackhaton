@@ -45,6 +45,7 @@ import {
   Profile,
   Coaching,
   Notifications,
+  Deadlines,
   Audit,
 } from "./pages";
 import { Competitions, CompetitionDetail } from "./competitions";
@@ -391,7 +392,7 @@ function Layout() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
   const navigate = useNavigate();
-  const notices = useData("/notifications");
+  const notices = useData("/notifications", !!auth.token);
   if (auth.restoring) return <div className="state full-screen">Восстанавливаем вход…</div>;
   if (!auth.token)
     return (
@@ -675,6 +676,7 @@ export default function App() {
           }
         />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="deadlines" element={<Deadlines />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

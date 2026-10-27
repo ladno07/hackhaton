@@ -254,6 +254,29 @@ details small {
   overflow: hidden;
   box-shadow: 0 2px 4px color-mix(in srgb, var(--fsp-neutral-900) 1%, transparent);
 }
+.telegram-connection {
+  margin-bottom: 20px;
+}
+.telegram-connection p {
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.telegram-pairing {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #e5e7ec;
+  border-radius: 8px;
+}
+.telegram-pairing input.telegram-pairing-code {
+  display: inline-block;
+  width: 210px;
+  max-width: 100%;
+  margin: 0 12px 12px 0;
+  font-family: monospace;
+  font-size: 24px;
+  letter-spacing: 4px;
+  font-weight: 700;
+}
 .panel-heading {
   padding: 22px 24px;
   display: flex;
@@ -1197,6 +1220,7 @@ td a:hover {
   color: var(--fsp-primary-500);
 }
 .date-tile {
+  padding: 0 8px;
   background: var(--fsp-neutral-50);
   border: 1px solid var(--fsp-neutral-100);
   border-radius: var(--radius-sm);
@@ -1212,6 +1236,14 @@ td a:hover {
   line-height: 1.15;
   font-weight: 600;
   color: var(--fsp-neutral-600);
+}
+.date-tile time,
+.competition-date time {
+  font-size: 12px;
+  font-weight: 600;
+  color: #495164;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .date-tile span {
   font-size: 9px;
@@ -1417,6 +1449,7 @@ td a:hover {
   background: var(--fsp-neutral-0);
 }
 .competition-date {
+  padding: 0 8px;
   display: flex;
   flex-direction: column;
   align-items: center;

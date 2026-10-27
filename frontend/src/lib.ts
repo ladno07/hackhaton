@@ -64,11 +64,7 @@ export const errorText = (err: any) => {
 };
 export const date = (s: string) =>
   s
-    ? new Date(s.slice(0, 10) + "T12:00:00").toLocaleDateString("ru-RU", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
+    ? s.slice(0, 10).split("-").reverse().join(".")
     : "—";
 export const today = () => new Date().toLocaleDateString("en-CA");
 export const roleNames: Record<string, string> = {

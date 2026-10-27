@@ -29,6 +29,7 @@ import { chartColors, date, download, formats, roleNames, sexNames, today } from
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
+import { TelegramConnection, TelegramDeliveryStatus } from "./telegram";
 import {
   Badge,
   Empty,
@@ -248,12 +249,7 @@ export function Overview() {
                   to={"/competitions/" + c.id}
                 >
                   <div className="date-tile">
-                    <strong>{new Date(c.start_date).getDate()}</strong>
-                    <span>
-                      {new Date(c.start_date).toLocaleDateString("ru-RU", {
-                        month: "short",
-                      })}
-                    </span>
+                    <time dateTime={c.start_date}>{date(c.start_date)}</time>
                   </div>
                   <div className="upcoming-copy">
                     <small>{c.discipline}</small>
@@ -1057,14 +1053,18 @@ export function Coaching() {
   );
 }
 export function Notifications() {
+  const { role } = useAuth();
   const q = useData("/notifications");
   const action = useAction();
   return (
     <>
       <PageTitle
         title="Уведомления"
-        description="События платформы и напоминания. Копии отправляются на электронную почту."
+        description={role === "ministry"
+          ? "События платформы и напоминания. Доставка на почту."
+          : "События платформы и напоминания. Доставка на почту и в подключённый Telegram."}
       />
+      {role !== "ministry" && <TelegramConnection />}
       <section className="panel">
         <State query={q}>
           {q.data?.length ? (
@@ -1094,6 +1094,7 @@ export function Notifications() {
                       : n.last_error
                         ? "Ошибка отправки; повторим автоматически"
                         : "В очереди на отправку"}
+                    {role !== "ministry" && <TelegramDeliveryStatus delivery={n.telegram_delivery} />}
                   </small>
                 </div>
                 {!n.read_at && (
@@ -1121,6 +1122,20 @@ export function Notifications() {
     </>
   );
 }
+export function Deadlines() {
+  const query = useData("/deadlines");
+  return <>
+    <PageTitle title="Мои сроки" description="Соревнования, разряды, категории и отчётность в пределах вашего кабинета." />
+    <section className="panel panel-padding"><State query={query}>
+      {query.data?.length ? <Table heads={["Событие", "Срок", "Подробнее"]}>
+        {query.data.map((item: any) => <tr key={`${item.kind}:${item.id}`}>
+          <td>{item.title}</td><td>{date(item.due_on)}</td>
+          <td><Link to={item.kind === "competition" ? `/competitions/${item.id}` : ["rank", "category"].includes(item.kind) ? "/ranks" : "/settings"}>Открыть</Link></td>
+        </tr>)}
+      </Table> : <Empty text="Предстоящих сроков пока нет" />}
+    </State></section>
+  </>;
+}
 export function Audit() {
   const q = useData("/audit");
   const [search, setSearch] = useState("");
@@ -1147,7 +1162,7 @@ export function Audit() {
                 )
                 .map((x: any) => (
                   <tr key={x.id}>
-                    <td>{new Date(x.created_at).toLocaleString("ru-RU")}</td>
+                    <td>{date(x.created_at)} {new Date(x.created_at).toLocaleTimeString("ru-RU")}</td>
                     <td>{x.full_name}</td>
                     <td>{roleNames[x.active_role]}</td>
                     <td>

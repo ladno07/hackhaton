@@ -503,7 +503,15 @@ def test_actual_smtp_delivery_to_local_capture(env, monkeypatch):
         with factory() as db:
             deliver(db)
             notices = db.scalars(select(Notification)).all()
-            assert all(n.mailed_at and not n.last_error for n in notices)
+            from app.security import Actor
+            from app.services.notifications import visible_in_role
+            for notice in notices:
+                user = db.get(User, notice.user_id)
+                eligible = any(visible_in_role(db, Actor(user, role.id), notice) for role in user.roles)
+                if eligible:
+                    assert notice.mailed_at and not notice.last_error
+                else:
+                    assert notice.mailed_at is None
         assert received
         assert message_from_bytes(received[0])["To"].endswith("@demo.example")
     finally:

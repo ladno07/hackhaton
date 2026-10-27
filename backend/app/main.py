@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.db import engine
-from app.routers import auth, registry, staff, competitions, federation, reports, public
+from app.routers import auth, registry, staff, competitions, federation, reports, public, telegram
 from app.routers import awards, competition_teams, documents, indicators, passports
 from app.services.notifications import worker
 
@@ -69,6 +69,7 @@ def health():
 
 
 for router in [
+    telegram.router,
     auth.router,
     registry.router,
     staff.router,

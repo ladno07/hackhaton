@@ -6,5 +6,5 @@ __pycache__/
 .pytest_cache/
 *.pyc
 *.db
-
 *.tsbuildinfo
+pytest-cache-files-*/

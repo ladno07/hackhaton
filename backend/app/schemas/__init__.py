@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_validator
 
@@ -53,6 +54,8 @@ class CompetitionIn(Strict):
     discipline_id: int
     type_id: int
     start_date: date
+    start_time: time | None = None
+    timezone: str = Field("Asia/Yekaterinburg", max_length=80)
     end_date: date
     deadline: date
     location: str = Field(min_length=2, max_length=200)
@@ -71,6 +74,7 @@ class CompetitionIn(Strict):
 
     @model_validator(mode="after")
     def dates(self):
+        validate_start(self.start_time, self.timezone)
         if (
             self.end_date < self.start_date
             or self.deadline > self.start_date
@@ -82,6 +86,29 @@ class CompetitionIn(Strict):
         expected = "Оренбургская область" if self.status == "regional" else "ЕКП"
         if self.calendar_plan != expected:
             raise ValueError(f"Для выбранного статуса календарный план: {expected}")
+        return self
+
+
+def validate_start(start_time, timezone):
+    try:
+        ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError("Укажите действующий часовой пояс IANA")
+    if start_time and start_time.tzinfo:
+        raise ValueError("Время указывается без смещения, с отдельным часовым поясом")
+
+
+class CompetitionScheduleIn(Strict):
+    start_date: date
+    end_date: date
+    start_time: time | None = None
+    timezone: str = Field("Asia/Yekaterinburg", max_length=80)
+
+    @model_validator(mode="after")
+    def dates(self):
+        validate_start(self.start_time, self.timezone)
+        if self.end_date < self.start_date:
+            raise ValueError("Дата окончания раньше начала")
         return self
 
 

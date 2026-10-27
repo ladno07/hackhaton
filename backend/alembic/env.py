@@ -18,6 +18,19 @@ else:
     with engine.connect() as connection:
         with connection.begin():
             tables = set(inspect(connection).get_table_names())
+            # Bot databases used the same numeric revisions as main. Identify
+            # that historical branch by its tables before resolving revisions.
+            if "alembic_version" in tables and "telegram_links" in tables:
+                for legacy, renamed in (
+                    ("0007", "0007_telegram"),
+                    ("0008", "0008_telegram"),
+                    ("0009", "0009_telegram"),
+                ):
+                    if "athlete_organizations" not in tables and "competition_teams" not in tables:
+                        connection.execute(
+                            text("UPDATE alembic_version SET version_num = :renamed WHERE version_num = :legacy"),
+                            {"legacy": legacy, "renamed": renamed},
+                        )
             if (
                 "alembic_version" in tables
                 and "competition_teams" in tables
