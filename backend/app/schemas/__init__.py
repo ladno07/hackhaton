@@ -2,7 +2,7 @@ from datetime import date
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_validator
 
-RoleName = Literal["admin", "athlete", "coach", "judge"]
+RoleName = Literal["admin", "athlete", "coach", "judge", "ministry"]
 Level = Literal["regional", "interregional", "russian_championship", "russian_junior"]
 Status = Literal["regional", "interregional", "national"]
 RatingClass = Literal["main", "junior", "other"]

@@ -48,20 +48,42 @@ FEMALE_NAMES = {
 }
 
 
+ROLES = [
+    ("admin", "Федерация"),
+    ("athlete", "Спортсмен"),
+    ("coach", "Тренер"),
+    ("judge", "Судья"),
+    ("ministry", "Минспорт"),
+]
+MINISTRY_DEMO = "minsport@demo.example"
+
+
+def ministry_demo(db):
+    """Read-only ministry account; the demo admin can also switch to this cabinet."""
+    ministry = db.get(Role, "ministry")
+    admin = db.scalar(select(User).where(User.email == "admin@demo.example"))
+    if admin and ministry not in admin.roles:
+        admin.roles = [*admin.roles, ministry]
+    if db.scalar(select(User.id).where(User.email == MINISTRY_DEMO)):
+        return
+    user = User(
+        email=MINISTRY_DEMO,
+        full_name="Демо · Ольга Степнова",
+        birth_date=date(1984, 3, 9),
+        sex="female",
+        password_hash=password_hash.hash(os.getenv("DEMO_PASSWORD", "DemoPass2026!")),
+    )
+    user.roles = [ministry]
+    db.add(user)
+    db.flush()
+
+
 def seed(demo=False):
     with SessionLocal() as db:
-        if not db.get(Role, "admin"):
-            db.add_all(
-                [
-                    Role(id=k, name=v)
-                    for k, v in [
-                        ("admin", "Федерация"),
-                        ("athlete", "Спортсмен"),
-                        ("coach", "Тренер"),
-                        ("judge", "Судья"),
-                    ]
-                ]
-            )
+        for k, v in ROLES:
+            if not db.get(Role, k):
+                db.add(Role(id=k, name=v))
+        db.flush()
         if not db.scalar(select(Discipline.id)):
             db.add_all(
                 [
@@ -104,9 +126,12 @@ def seed(demo=False):
                     )
                 )
         db.commit()
-        if not demo or db.scalar(
-            select(User.id).where(User.email == "admin@demo.example")
-        ):
+        if not demo:
+            return
+        if db.scalar(select(User.id).where(User.email == "admin@demo.example")):
+            # Demo data loaded before the ministry cabinet existed: add only it.
+            ministry_demo(db)
+            db.commit()
             return
         today = date.today()
         year = today.year
@@ -129,7 +154,7 @@ def seed(demo=False):
         admin = make(
             "admin@demo.example",
             "Демо · Алексей Северный",
-            ["admin", "athlete", "coach", "judge"],
+            ["admin", "athlete", "coach", "judge", "ministry"],
         )
         trainer = make("coach@demo.example", "Демо · Марина Ветрова", ["coach"])
         referee = make("judge@demo.example", "Демо · Павел Лесной", ["judge"])
@@ -416,6 +441,7 @@ def seed(demo=False):
                 due_on=today + timedelta(days=12),
             )
         )
+        ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(
             db,

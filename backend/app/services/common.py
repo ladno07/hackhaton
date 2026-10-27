@@ -63,7 +63,7 @@ def can_athlete(db, actor, athlete_id, discipline_id=None):
 
 
 def visible_athletes(db, actor):
-    if actor.role == "admin":
+    if actor.role in ("admin", "ministry"):
         return set(db.scalars(select(Athlete.id)).all())
     if actor.role == "athlete":
         return {own(db, Athlete, actor).id}
