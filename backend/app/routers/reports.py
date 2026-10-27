@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, timedelta
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -6,14 +7,17 @@ from app.db import get_db
 from app.models import *
 from app.security import Actor, current_actor, allow
 from app.services.common import *
-from app.services.reports import population, export_document, MIME
+from app.config import settings
+from app.services.documents import OfficialDocument, export_document, MIME
+from app.services.reports import population
 from app.services.protocols import versions
 
 router = APIRouter(tags=["Документы и аналитика"])
+HEAD = (settings.fsp_head_position, settings.fsp_head_name)
 
 
-def download(title, headers, rows, fmt, filename, subtitle=""):
-    data = export_document(title, headers, rows, fmt, subtitle)
+def download(doc: OfficialDocument, fmt, filename):
+    data = export_document(doc, fmt)
     return Response(
         data,
         media_type=MIME[fmt],
@@ -54,7 +58,11 @@ def dashboard(actor: Actor = Depends(current_actor), db: Session = Depends(get_d
         db.scalar(
             select(func.count())
             .select_from(CompetitionJudge)
-            .where(CompetitionJudge.judge_id == judge_id)
+            .join(Competition, Competition.id == CompetitionJudge.competition_id)
+            .where(
+                CompetitionJudge.judge_id == judge_id,
+                Competition.end_date >= date.today(),
+            )
         )
         if judge_id
         else 0
@@ -95,6 +103,116 @@ def dashboard(actor: Actor = Depends(current_actor), db: Session = Depends(get_d
             )
         ),
         "organizations": db.scalar(select(func.count()).select_from(Organization)),
+    }
+
+
+ATTENTION_DAYS = 30  # same window as expiry notifications
+
+
+@router.get("/dashboard/attention")
+def attention(
+    actor: Actor = Depends(allow("admin")), db: Session = Depends(get_db)
+):
+    """Federation to-do list: what waits for a decision or expires soon."""
+    today = date.today()
+    until = today + timedelta(days=ATTENTION_DAYS)
+    items = []
+
+    def add(kind, id, title, detail, due_on, date_label, link):
+        items.append(
+            {
+                "kind": kind,
+                "id": id,
+                "title": title,
+                "detail": detail,
+                "due_on": due_on,
+                "date_label": date_label,
+                "link": link,
+                "overdue": due_on < today,
+            }
+        )
+
+    pending = db.execute(
+        select(Competition, func.count(CompetitionApplication.id))
+        .join(CompetitionApplication, CompetitionApplication.competition_id == Competition.id)
+        .where(CompetitionApplication.status == "pending")
+        .group_by(Competition.id)
+    ).all()
+    for c, count in pending:
+        add(
+            "applications",
+            c.id,
+            c.title,
+            f"На рассмотрении: {count}",
+            c.deadline,
+            "приём до",
+            f"/competitions/{c.id}",
+        )
+    for a in db.scalars(
+        select(RankApplication).where(RankApplication.status == "pending")
+    ):
+        owner = db.get(Athlete, a.athlete_id) if a.athlete_id else db.get(Judge, a.judge_id)
+        add(
+            "rank_applications",
+            a.id,
+            owner.user.full_name,
+            ("Разряд: " if a.athlete_id else "Категория: ") + a.name,
+            a.created_at.date(),
+            "подана",
+            "/ranks",
+        )
+    for r in db.scalars(
+        select(SportsRank).where(
+            SportsRank.expires_on >= today, SportsRank.expires_on <= until
+        )
+    ):
+        add(
+            "ranks",
+            r.id,
+            db.get(Athlete, r.athlete_id).user.full_name,
+            r.name,
+            r.expires_on,
+            "истекает",
+            "/registry",
+        )
+    for c, judge in db.execute(
+        select(JudgeCategory, Judge)
+        .join(Judge, Judge.id == JudgeCategory.judge_id)
+        .where(
+            Judge.archived_at.is_(None),
+            JudgeCategory.expires_on >= today,
+            JudgeCategory.expires_on <= until,
+        )
+    ):
+        add(
+            "categories",
+            c.id,
+            judge.user.full_name,
+            c.name,
+            c.expires_on,
+            "истекает",
+            "/registry",
+        )
+    for d in db.scalars(select(Deadline).where(Deadline.done == False)):
+        add("reports", d.id, d.title, "Срок отчётности", d.due_on, "срок", "/settings")
+    governor = date(today.year if today.month == 1 else today.year + 1, 2, 1)
+    if governor <= until:
+        add(
+            "reports",
+            0,
+            "Ходатайства на премии Губернатора",
+            "Срок подачи",
+            governor,
+            "срок",
+            "/ratings",
+        )
+
+    items.sort(key=lambda x: x["due_on"])
+    kinds = ("applications", "rank_applications", "ranks", "categories", "reports")
+    return {
+        "window_days": ATTENTION_DAYS,
+        "counts": {k: sum(i["kind"] == k for i in items) for k in kinds},
+        "items": items,
     }
 
 
@@ -149,14 +267,30 @@ def export_population(
         min_age,
         max_age,
     )
-    totals = "; ".join(f"{r['year']}: {r['count']}" for r in data["totals"])
+    totals = "; ".join(f"{r['year']} — {r['count']}" for r in data["totals"])
+    filters = [
+        ("Организация", organization_id and require(db, Organization, organization_id).name),
+        ("Дисциплина", discipline_id and require(db, Discipline, discipline_id).name),
+        ("Муниципалитет", municipality),
+        ("Возраст", f"{min_age}–{max_age} лет" if (min_age, max_age) != (0, 100) else ""),
+    ]
     return download(
-        "Численность занимающихся спортивным программированием",
-        data["headers"],
-        data["rows"],
+        OfficialDocument(
+            kind="Отчёт",
+            title="о численности лиц, занимающихся спортивным программированием",
+            headers=data["headers"],
+            rows=data["rows"],
+            dated=date.today(),
+            meta=[
+                ("Период", f"{start_year}–{end_year} гг."),
+                *[(label, value) for label, value in filters if value],
+                ("Итого по годам", totals),
+            ],
+            outro=["Методика подсчёта: " + data["source"]],
+            signatures=[HEAD, ("Исполнитель", actor.user.full_name)],
+        ),
         fmt,
         "population",
-        totals + ". " + data["source"],
     )
 
 
@@ -186,11 +320,15 @@ def protocol(
         + [e["full_name"], e["organization"], e["score"]]
         for e in picked.entries
     ]
-    judges = "; ".join(
-        f"{db.get(Judge, j.judge_id).user.full_name} — {j.position}"
+    panel = [
+        (db.get(Judge, j.judge_id).user.full_name, j.position)
         for j in db.scalars(
             select(CompetitionJudge).where(CompetitionJudge.competition_id == comp.id)
         )
+    ]
+    judges = "; ".join(f"{name} — {position}" for name, position in panel)
+    by_position = lambda title: next(
+        (name for name, position in panel if position == title), ""
     )
     edition = f"Редакция {picked.version} от {picked.created_at:%d.%m.%Y}"
     if picked.version > 1:
@@ -198,14 +336,33 @@ def protocol(
     if picked is not history[-1]:
         edition += f". Заменена редакцией {history[-1].version}"
     return download(
-        "Итоговый протокол: " + comp.title,
-        ["Место"]
-        + (["Команда"] if teams else [])
-        + ["Спортсмен", "Организация", "Баллы"],
-        rows,
+        OfficialDocument(
+            kind="Итоговый протокол",
+            title=f"соревнования «{comp.title}»",
+            headers=["Место"]
+            + (["Команда"] if teams else [])
+            + ["Спортсмен", "Организация", "Баллы"],
+            rows=rows,
+            dated=comp.end_date,
+            meta=[
+                ("Редакция", edition),
+                ("Дисциплина", db.get(Discipline, comp.discipline_id).name),
+                (
+                    "Сроки проведения",
+                    f"{comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}",
+                ),
+                ("Место проведения", comp.location),
+                ("Календарный план", f"{comp.calendar_plan} № {comp.calendar_number}"),
+                ("Участников", len(rows)),
+                ("Судейская коллегия", judges or "не назначена"),
+            ],
+            signatures=[
+                ("Главный судья", by_position("Главный судья")),
+                ("Главный секретарь", by_position("Главный секретарь")),
+            ],
+        ),
         fmt,
         f"protocol-{comp.id}-v{picked.version}",
-        f"{edition}. {comp.start_date} — {comp.end_date}. {comp.location}. {comp.calendar_plan} № {comp.calendar_number}. Судейская коллегия: {judges or 'не назначена'}",
     )
 
 
@@ -219,25 +376,43 @@ def athlete_report(
     a = can_athlete(db, actor, athlete_id)
     rows = [
         [
-            c.start_date,
+            n,
+            f"{c.start_date:%d.%m.%Y}",
             c.title,
             db.get(Discipline, c.discipline_id).short_name,
             r.place,
             r.score,
         ]
-        for r, c in db.execute(
+        for n, (r, c) in enumerate(db.execute(
             select(CompetitionResult, Competition)
             .join(Competition, Competition.id == CompetitionResult.competition_id)
             .where(
                 CompetitionResult.athlete_id == a.id, Competition.state == "published"
             )
             .order_by(Competition.start_date.desc())
-        )
+        ), 1)
     ]
+    org = a.organization_id and db.get(Organization, a.organization_id)
     return download(
-        "История выступлений: " + a.user.full_name,
-        ["Дата", "Соревнование", "Дисциплина", "Место", "Баллы"],
-        rows,
+        OfficialDocument(
+            kind="Справка",
+            title="о результатах выступлений спортсмена",
+            headers=["№ п/п", "Дата", "Соревнование", "Дисциплина", "Место", "Баллы"],
+            rows=rows,
+            dated=date.today(),
+            meta=[
+                ("Спортсмен", a.user.full_name),
+                ("Дата рождения", f"{a.user.birth_date:%d.%m.%Y}"),
+                ("Организация", org.name if org else "не указана"),
+                ("Муниципалитет", a.municipality),
+                ("Выступлений", len(rows)),
+            ],
+            outro=[
+                "Сведения сформированы по опубликованным итоговым протоколам "
+                "соревнований. Справка выдана для предъявления по месту требования."
+            ],
+            signatures=[HEAD],
+        ),
         fmt,
         f"athlete-{a.id}",
     )
@@ -265,29 +440,56 @@ def team_export(
             )
         rows.append(
             [
+                len(rows) + 1,
                 a.user.full_name,
+                f"{a.user.birth_date:%d.%m.%Y}",
                 db.get(Discipline, t.discipline_id).short_name,
                 a.municipality,
             ]
         )
-    title = (
-        f"ПРОЕКТ ПРИКАЗА. Утверждение сборной Оренбургской области на {season} год"
-        if order
-        else f"Сборная Оренбургской области · {season}"
+    team = (
+        "спортивной сборной команды Оренбургской области "
+        f"по спортивному программированию на {season} год"
     )
-    subtitle = (
-        "Утвердить следующий состав сборной. Номер, дата и подпись уполномоченного лица заполняются после согласования."
-        if order
-        else "Состав сформирован федерацией вручную на основе сезонного рейтинга."
-    )
-    return download(
-        title,
-        ["Спортсмен", "Дисциплина", "Муниципалитет"],
-        rows,
-        fmt,
-        "team-order" if order else "team",
-        subtitle,
-    )
+    headers = ["№ п/п", "Фамилия, имя, отчество", "Дата рождения", "Дисциплина",
+               "Муниципалитет"]
+    if order:
+        doc = OfficialDocument(
+            kind="Приказ",
+            title="Об утверждении состава " + team,
+            headers=headers,
+            rows=rows,
+            number="",
+            draft=True,
+            intro=[
+                "В соответствии с Федеральным законом от 04.12.2007 № 329-ФЗ "
+                "«О физической культуре и спорте в Российской Федерации», на основании "
+                f"итогов сезонного рейтинга спортсменов за {season} год",
+                "ПРИКАЗЫВАЮ:",
+                f"1. Утвердить состав {team} согласно приложению к настоящему приказу.",
+                "2. Тренерам обеспечить подготовку спортсменов к участию "
+                "в соревнованиях в составе сборной команды.",
+                "3. Контроль за исполнением настоящего приказа оставляю за собой.",
+            ],
+            signatures=[HEAD],
+            appendix=[
+                "Приложение",
+                f"к приказу {settings.fsp_short_name}",
+                "от «___» ____________ 20___ г. № ________",
+            ],
+            table_title="Состав " + team,
+        )
+    else:
+        doc = OfficialDocument(
+            kind="Список",
+            title="кандидатов в состав " + team,
+            headers=headers,
+            rows=rows,
+            dated=date.today(),
+            outro=["Состав сформирован федерацией на основе сезонного рейтинга."],
+            signatures=[HEAD],
+        )
+    return download(doc, fmt, "team-order" if order else "team")
 
 
 @router.get("/coaching/athletes/{athlete_id}/summary")
@@ -339,3 +541,111 @@ def coaching_summary(
         },
         "results": results,
     }
+
+
+def judging_history(db, judge_id, year=None):
+    """Competitions the judge worked at, i.e. assignments that already ended."""
+    entries = db.execute(
+        select(CompetitionJudge, Competition, Discipline)
+        .join(Competition, Competition.id == CompetitionJudge.competition_id)
+        .join(Discipline, Discipline.id == Competition.discipline_id)
+        .where(
+            CompetitionJudge.judge_id == judge_id, Competition.end_date < date.today()
+        )
+        .order_by(Competition.start_date.desc(), Competition.id.desc())
+    ).all()
+    participants = dict(
+        db.execute(
+            select(CompetitionResult.competition_id, func.count())
+            .where(
+                CompetitionResult.competition_id.in_(
+                    [c.id for _, c, _ in entries]
+                )
+            )
+            .group_by(CompetitionResult.competition_id)
+        ).all()
+    )
+    years = sorted({c.start_date.year for _, c, _ in entries}, reverse=True)
+    items = [
+        {
+            "competition_id": c.id,
+            "title": c.title,
+            "start_date": c.start_date,
+            "end_date": c.end_date,
+            "location": c.location,
+            "discipline": d.short_name,
+            "status": c.status,
+            "state": c.state,
+            "position": j.position,
+            "participants": participants.get(c.id, 0),
+        }
+        for j, c, d in entries
+        if year is None or c.start_date.year == year
+    ]
+    return years, items
+
+
+@router.get("/judging/report")
+def judging_report(
+    year: int | None = Query(None, ge=1970, le=2100),
+    actor: Actor = Depends(allow("judge")),
+    db: Session = Depends(get_db),
+):
+    judge = own(db, Judge, actor)
+    years, items = judging_history(db, judge.id, year)
+    return {
+        "judge": {"id": judge.id, "full_name": actor.user.full_name},
+        "years": years,
+        "stats": {
+            "competitions": len(items),
+            "chief": sum(i["position"] == "Главный судья" for i in items),
+            "participants": sum(i["participants"] for i in items),
+            "disciplines": len({i["discipline"] for i in items}),
+        },
+        "items": items,
+    }
+
+
+@router.get("/exports/judging.{fmt}")
+def judging_export(
+    fmt: Literal["pdf", "docx", "xlsx"],
+    year: int | None = Query(None, ge=1970, le=2100),
+    actor: Actor = Depends(allow("judge")),
+    db: Session = Depends(get_db),
+):
+    judge = own(db, Judge, actor)
+    _, items = judging_history(db, judge.id, year)
+    period = f"{year} год" if year else "за всё время"
+    return download(
+        OfficialDocument(
+            kind="Отчёт",
+            title="о судейской деятельности",
+            headers=["№ п/п", "Сроки", "Соревнование", "Дисциплина",
+                     "Место проведения", "Должность", "Участников"],
+            rows=[
+                [
+                    n,
+                    f"{i['start_date']:%d.%m.%Y} — {i['end_date']:%d.%m.%Y}",
+                    i["title"],
+                    i["discipline"],
+                    i["location"],
+                    i["position"],
+                    i["participants"],
+                ]
+                for n, i in enumerate(items, 1)
+            ],
+            dated=date.today(),
+            meta=[
+                ("Спортивный судья", actor.user.full_name),
+                ("Период", period),
+                ("Соревнований", len(items)),
+                (
+                    "Из них главным судьёй",
+                    sum(i["position"] == "Главный судья" for i in items),
+                ),
+            ],
+            signatures=[("Спортивный судья", actor.user.full_name)],
+        ),
+        fmt,
+        f"judging-{judge.id}" + (f"-{year}" if year else ""),
+    )

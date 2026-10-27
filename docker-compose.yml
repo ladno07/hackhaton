@@ -25,6 +25,7 @@ services:
       SMTP_TLS: ${SMTP_TLS:-false}
       MAIL_FROM: ${MAIL_FROM:-federation@orencode.test}
       CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      FSP_HEAD_NAME: ${FSP_HEAD_NAME:-}
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       db: {condition: service_healthy}

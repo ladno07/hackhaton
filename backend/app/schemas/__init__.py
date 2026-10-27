@@ -174,6 +174,8 @@ class ProfileIn(Strict):
     full_name: str = Field(min_length=3, max_length=200)
     sex: Sex | None = None
     organization_id: int | None = None
+    # date of the transfer when organization_id changes; today by default
+    organization_since: date | None = None
     municipality: str = Field(min_length=2, max_length=120)
     training_stage: str | None = Field(None, max_length=120)
     rusada_date: date | None = None

@@ -8,6 +8,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 import {
   Activity,
@@ -16,7 +17,6 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   ChevronDown,
-  Code2,
   FileCheck2,
   FileText,
   Gavel,
@@ -28,18 +28,19 @@ import {
   Trophy,
   Users,
   X,
+  ClipboardList,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames } from "./lib";
 import { useAuth, useData, useToast } from "./state";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
+import { FspLogo } from "./components/logo";
 import {
   Overview,
   History,
   Profile,
   Coaching,
-  Assignments,
   Notifications,
   Audit,
 } from "./pages";
@@ -52,6 +53,8 @@ import {
   LegacyPublicProfile,
 } from "./public-passport";
 import { AthleteSummary } from "./athlete-summary";
+import { Assignments, JudgingHistory } from "./judging";
+import { Navigator } from "./navigator";
 
 import { CertificateVerification } from "./certificate-verification";
 
@@ -66,7 +69,8 @@ function Login() {
     )
       ? returnTo
       : "/";
-  const [register, setRegister] = useState(false);
+  const [params] = useSearchParams();
+  const [register, setRegister] = useState(params.get("register") === "1");
   const [error, setError] = useState("");
   const [form, setForm] = useState<any>({
     email: "",
@@ -101,13 +105,7 @@ function Login() {
     <div className="auth-page">
       <section className="auth-story">
         <Link to="/" className="brand">
-          <span className="brand-icon">
-            <Code2 />
-          </span>
-          <span>
-            орен<span className="brand-red">код</span>
-            <small>ФЕДЕРАЦИЯ СПОРТИВНОГО ПРОГРАММИРОВАНИЯ</small>
-          </span>
+          <FspLogo className="brand-logo" />
         </Link>
         <div>
           <div className="eyebrow">ОРЕНБУРГСКАЯ ОБЛАСТЬ · 2026</div>
@@ -283,6 +281,10 @@ function Login() {
               {register ? "Войти" : "Регистрация"}
             </button>
           </div>
+          <Link className="auth-navigator" to="/start">
+            Новичкам: дисциплины, где заниматься и ближайшие старты{" "}
+            <ArrowRight size={14} />
+          </Link>
           <div className="demo-note">
             <strong>Демонстрационный доступ</strong>
             <span>admin@demo.example / DemoPass2026!</span>
@@ -321,8 +323,14 @@ const navigation = [
   },
   {
     to: "/assignments",
-    label: "Мои назначения",
+    label: "Назначения",
     icon: Gavel,
+    roles: ["judge"],
+  },
+  {
+    to: "/judging",
+    label: "Мои соревнования",
+    icon: ClipboardList,
     roles: ["judge"],
   },
   {
@@ -394,13 +402,7 @@ function Layout() {
       )}
       <aside className={"sidebar " + (mobile ? "sidebar-visible" : "")}>
         <Link className="brand" to="/">
-          <span className="brand-icon">
-            <Code2 />
-          </span>
-          <span>
-            орен<span className="brand-red">код</span>
-            <small>ЦИФРОВАЯ ПЛАТФОРМА ФСП</small>
-          </span>
+          <FspLogo className="brand-logo" />
         </Link>
         <div className="region-label">
           Оренбургская область <span>2026</span>
@@ -423,7 +425,7 @@ function Layout() {
         </nav>
         <div className="sidebar-bottom">
           <div className="federation-mark">
-            <Code2 size={24} />
+            <FspLogo variant="mark" className="federation-logo" />
             <div>
               Федерация спортивного
               <br />
@@ -539,6 +541,7 @@ export default function App() {
       <Route path="/p/:slug" element={<LegacyPublicProfile />} />
       <Route path="/verify/:digest" element={<LegacyPublicProfile />} />
       <Route path="/passport-preview" element={<LegacyPublicProfile />} />
+      <Route path="/start" element={<Navigator />} />
       <Route element={<Layout />}>
         <Route index element={<Overview />} />
         <Route path="athletes/:id/profile" element={<AthleteProfileView />} />
@@ -591,6 +594,10 @@ export default function App() {
               <Assignments />
             </Guard>
           }
+        />
+        <Route
+          path="judging"
+          element={<Guard roles={["judge"]}><JudgingHistory /></Guard>}
         />
         <Route path="ranks" element={<Ranks />} />
         <Route path="ratings" element={<Ratings />} />

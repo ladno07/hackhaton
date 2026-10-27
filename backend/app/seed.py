@@ -10,7 +10,8 @@ from app.security import password_hash, Actor
 from app.services.common import audit, age_at
 from app.services.ratings import recalculate
 from app.services.notifications import notify
-from app.services.reports import export_document
+from app.config import settings
+from app.services.documents import OfficialDocument, export_document
 from app.services.protocols import add_version
 
 DISCIPLINES = [
@@ -213,6 +214,38 @@ def seed(demo=False):
         db.flush()
         athletes.append(a)
         db.add(AthleteDiscipline(athlete_id=a.id, discipline_id=1, start_year=year - 1))
+        for a in athletes:
+            first = min(
+                db.scalars(
+                    select(AthleteDiscipline.start_year).where(
+                        AthleteDiscipline.athlete_id == a.id
+                    )
+                )
+            )
+            db.add(
+                AthleteOrganization(
+                    athlete_id=a.id,
+                    organization_id=a.organization_id,
+                    start_date=date(first, 1, 1),
+                )
+            )
+        # Demo transfer: the second athlete moved from Orenburg to Orsk last autumn.
+        moved = athletes[1]
+        db.flush()
+        period = db.scalar(
+            select(AthleteOrganization).where(
+                AthleteOrganization.athlete_id == moved.id
+            )
+        )
+        period.organization_id = orgs[0].id
+        period.end_date = date(year - 1, 8, 31)
+        db.add(
+            AthleteOrganization(
+                athlete_id=moved.id,
+                organization_id=moved.organization_id,
+                start_date=date(year - 1, 9, 1),
+            )
+        )
         for a in athletes[1:6]:
             link = AthleteCoach(
                 athlete_id=a.id, coach_id=coach.id, discipline_id=1, status="active"
@@ -332,18 +365,22 @@ def seed(demo=False):
             else:
                 participants = f"{c.min_age}–{c.max_age} лет на дату старта"
             pdf = export_document(
-                "Положение о проведении соревнования",
-                ["Раздел", "Содержание"],
-                [
-                    ["Наименование", c.title],
-                    ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
-                    ["Место", c.location],
-                    ["Участники", participants],
-                    ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
-                    ["Документ", "Демонстрационный образец, не имеет силы"],
-                ],
+                OfficialDocument(
+                    kind="Положение",
+                    title=f"о проведении соревнования «{c.title}»",
+                    headers=["Раздел", "Содержание"],
+                    rows=[
+                        ["Наименование", c.title],
+                        ["Сроки", f"{c.start_date:%d.%m.%Y} — {c.end_date:%d.%m.%Y}"],
+                        ["Место", c.location],
+                        ["Участники", participants],
+                        ["Заявки", f"Через платформу до {c.deadline:%d.%m.%Y}"],
+                        ["Документ", "Демонстрационный образец, не имеет силы"],
+                    ],
+                    number=c.calendar_number,
+                    approve=(settings.fsp_head_position, settings.fsp_head_name),
+                ),
                 "pdf",
-                c.calendar_number,
             )
             db.add(
                 CompetitionRegulation(
