@@ -330,7 +330,7 @@ const navigation = [
     to: "/profile",
     label: "Мой профиль",
     icon: ShieldCheck,
-    roles: ["athlete"],
+    roles: ["athlete", "coach", "judge"],
   },
 ];
 function Layout() {
@@ -571,7 +571,7 @@ export default function App() {
         <Route
           path="profile"
           element={
-            <Guard roles={["athlete"]}>
+            <Guard roles={["athlete", "coach", "judge"]}>
               <Profile />
             </Guard>
           }

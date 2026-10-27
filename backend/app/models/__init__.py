@@ -13,7 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 from app.db import Base
 
 
@@ -92,19 +92,48 @@ class AthleteDiscipline(Base):
     end_year: Mapped[int | None] = mapped_column(Integer)
 
 
-class Coach(Base):
-    __tablename__ = "coaches"
+class StaffCard:
+    """Card of a coach or a judge; an archived card keeps its history."""
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
-    user: Mapped[User] = relationship(lazy="joined")
+    municipality: Mapped[str] = mapped_column(String(120), default="Оренбург")
+    phone: Mapped[str | None] = mapped_column(String(30))
+    contact_email: Mapped[str | None] = mapped_column(String(254))
+    qualification: Mapped[str | None] = mapped_column(String(200))
+    experience_since: Mapped[int | None] = mapped_column(Integer)
+    about: Mapped[str | None] = mapped_column(Text)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archive_reason: Mapped[str | None] = mapped_column(Text)
+
+    @declared_attr
+    def user(cls) -> Mapped[User]:
+        return relationship(lazy="joined")
 
 
-class Judge(Base):
+class Coach(StaffCard, Base):
+    __tablename__ = "coaches"
+
+
+class Judge(StaffCard, Base):
     __tablename__ = "judges"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
-    user: Mapped[User] = relationship(lazy="joined")
+
+
+class CoachDiscipline(Base):
+    __tablename__ = "coach_disciplines"
+    coach_id: Mapped[int] = mapped_column(ForeignKey("coaches.id"), primary_key=True)
+    discipline_id: Mapped[int] = mapped_column(
+        ForeignKey("disciplines.id"), primary_key=True
+    )
+
+
+class JudgeDiscipline(Base):
+    __tablename__ = "judge_disciplines"
+    judge_id: Mapped[int] = mapped_column(ForeignKey("judges.id"), primary_key=True)
+    discipline_id: Mapped[int] = mapped_column(
+        ForeignKey("disciplines.id"), primary_key=True
+    )
 
 
 class AthleteCoach(Base):

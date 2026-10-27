@@ -28,6 +28,7 @@ import { useAction, useAuth, useData } from "./state";
 import { date, formats, roleNames, sexNames, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
+import { StaffEditor, staffKinds } from "./staff";
 import {
   Badge,
   Empty,
@@ -441,10 +442,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
           />
         </Field>
         <Field label="Пол" hint="Нужен для возрастных групп соревнований">
-          <select
-            value={v.sex}
-            onChange={(e) => change("sex", e.target.value)}
-          >
+          <select value={v.sex} onChange={(e) => change("sex", e.target.value)}>
             <option value="">Не указан</option>
             {Object.entries(sexNames).map(([k, s]) => (
               <option key={k} value={k}>
@@ -586,8 +584,45 @@ export function ProfileEditor({ athlete, onSaved }: any) {
     </form>
   );
 }
+function StaffProfile({ kind, id }: any) {
+  const q = useData(staffKinds[kind].url + "/" + id);
+  return (
+    <>
+      <PageTitle
+        title="Мой профиль"
+        description={`Карточка ${staffKinds[kind].title}: контакты, организация и дисциплины.`}
+      />
+      <section className="panel form-panel">
+        <State query={q}>
+          {q.data?.archived_at && (
+            <p className="inline-note">
+              Карточка в архиве с {date(q.data.archived_at)}:{" "}
+              {q.data.archive_reason}. Изменения недоступны — обратитесь в
+              федерацию.
+            </p>
+          )}
+          {q.data && (
+            <StaffEditor
+              key={q.data.id}
+              kind={kind}
+              card={q.data}
+              disabled={!!q.data.archived_at}
+            />
+          )}
+        </State>
+      </section>
+    </>
+  );
+}
+
 export function Profile() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  if (role === "coach" || role === "judge")
+    return <StaffProfile kind={role} id={user[role + "_id"]} />;
+  return <AthleteProfile user={user} />;
+}
+
+function AthleteProfile({ user }: any) {
   const q = useData("/athletes/" + user.athlete_id);
   return (
     <>

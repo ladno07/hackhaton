@@ -51,7 +51,7 @@ def apply_rank(
             raise HTTPException(
                 422, "Для судейской категории результат спортсмена не указывается"
             )
-        values["judge_id"] = own(db, Judge, actor).id
+        values["judge_id"] = active_card(db, Judge, actor).id
     else:
         if data.name not in RANKS[1:]:
             raise HTTPException(422, "Выберите разряд из справочника")
