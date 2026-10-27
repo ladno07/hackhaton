@@ -366,6 +366,176 @@ def protocol(
     )
 
 
+CHIEF = "Главный судья"
+FORMATS = {"onsite": "очно", "online": "онлайн", "hybrid": "смешанный"}
+
+
+def years(n):
+    """21 год, 24 года, 17 лет."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "год"
+    return "года" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "лет"
+
+
+def judging_comp(db, actor, comp_id, chief_only=False):
+    """Federation and ministry see any panel; a judge only one they work in."""
+    comp = require(db, Competition, comp_id)
+    if comp.state == "draft" and actor.role != "admin":
+        raise HTTPException(404, "Соревнование не найдено")
+    if actor.role == "judge":
+        seat = db.get(CompetitionJudge, (comp.id, own(db, Judge, actor).id))
+        if not seat or chief_only and seat.position != CHIEF:
+            raise HTTPException(403, "Документ доступен судьям этой коллегии")
+    elif actor.role not in ("admin", "ministry"):
+        raise HTTPException(403, "Нет прав в активной роли")
+    return comp
+
+
+def panel(db, comp):
+    """(full name, position, category on the last day, municipality)."""
+    rows = []
+    for seat in db.scalars(
+        select(CompetitionJudge).where(CompetitionJudge.competition_id == comp.id)
+    ):
+        judge = db.get(Judge, seat.judge_id)
+        category = db.scalar(
+            select(JudgeCategory)
+            .where(
+                JudgeCategory.judge_id == judge.id,
+                JudgeCategory.assigned_on <= comp.end_date,
+                JudgeCategory.expires_on >= comp.end_date,
+            )
+            .order_by(JudgeCategory.assigned_on.desc())
+        )
+        rows.append(
+            (
+                judge.user.full_name,
+                seat.position,
+                category.name if category else "—",
+                judge.municipality,
+            )
+        )
+    # the chief judge and the chief secretary head the list
+    return sorted(rows, key=lambda r: (r[1] != CHIEF, not r[1].startswith("Главный"), r[0]))
+
+
+def competition_meta(db, comp):
+    return [
+        ("Дисциплина", db.get(Discipline, comp.discipline_id).name),
+        ("Сроки проведения", f"{comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}"),
+        ("Место проведения", f"{comp.location} ({FORMATS.get(comp.format, comp.format)})"),
+        ("Календарный план", f"{comp.calendar_plan} № {comp.calendar_number}"),
+    ]
+
+
+@router.get("/exports/panel/{comp_id}.{fmt}")
+def panel_export(
+    comp_id: int,
+    fmt: str,
+    actor: Actor = Depends(current_actor),
+    db: Session = Depends(get_db),
+):
+    comp = judging_comp(db, actor, comp_id)
+    rows = panel(db, comp)
+    if not rows:
+        raise HTTPException(409, "Судейская коллегия ещё не назначена")
+    chief = next((r[0] for r in rows if r[1] == CHIEF), "")
+    return download(
+        OfficialDocument(
+            kind="Состав",
+            title=f"судейской коллегии соревнования «{comp.title}»",
+            headers=["Фамилия, имя, отчество", "Судейская должность", "Категория", "Муниципалитет"],
+            rows=[list(r) for r in rows],
+            dated=comp.start_date,
+            meta=competition_meta(db, comp) + [("Численность коллегии", len(rows))],
+            approve=HEAD,
+            signatures=[(CHIEF, chief)],
+        ),
+        fmt,
+        f"panel-{comp.id}",
+    )
+
+
+@router.get("/exports/chief-report/{comp_id}.{fmt}")
+def chief_report(
+    comp_id: int,
+    fmt: str,
+    actor: Actor = Depends(current_actor),
+    db: Session = Depends(get_db),
+):
+    comp = judging_comp(db, actor, comp_id, chief_only=True)
+    history = versions(db, comp.id)
+    if comp.state != "published" or not history:
+        raise HTTPException(409, "Отчёт формируется после публикации протокола")
+    latest = history[-1]
+    athletes = [db.get(Athlete, e["athlete_id"]) for e in latest.entries]
+    users = [a.user for a in athletes]
+    ages = [age_at(u.birth_date, comp.start_date) for u in users]
+    statuses = dict(
+        db.execute(
+            select(CompetitionApplication.status, func.count())
+            .where(CompetitionApplication.competition_id == comp.id)
+            .group_by(CompetitionApplication.status)
+        ).all()
+    )
+    judges = panel(db, comp)
+    by_position = lambda title: next((r[0] for r in judges if r[1] == title), "")
+    sexes = {"male": "мужчин", "female": "женщин"}
+    by_sex = ", ".join(
+        f"{sexes[s]}: {sum(u.sex == s for u in users)}"
+        for s in sexes
+        if any(u.sex == s for u in users)
+    )
+    teams = any(e["team_name"] for e in latest.entries)
+    winners = [e for e in latest.entries if e["place"] <= 3]
+    corrections = [
+        f"Редакция {v.version} от {v.created_at:%d.%m.%Y}: {v.reason}" for v in history[1:]
+    ]
+    return download(
+        OfficialDocument(
+            kind="Отчёт",
+            title=f"главного судьи о проведении соревнования «{comp.title}»",
+            headers=["Место"]
+            + (["Команда"] if teams else [])
+            + ["Спортсмен", "Организация", "Баллы"],
+            rows=[
+                [e["place"]]
+                + ([e["team_name"] or "—"] if teams else [])
+                + [e["full_name"], e["organization"], e["score"]]
+                for e in winners
+            ],
+            table_title="Призёры соревнования",
+            dated=comp.end_date,
+            meta=competition_meta(db, comp)
+            + [
+                (
+                    "Заявки",
+                    f"подано {sum(statuses.values())}, одобрено {statuses.get('approved', 0)}, "
+                    f"отклонено {statuses.get('rejected', 0)}",
+                ),
+                ("Участников по протоколу", f"{len(users)}" + (f" ({by_sex})" if by_sex else "")),
+                ("Возраст участников", f"{min(ages)}–{max(ages)} {years(max(ages))}" if ages else "—"),
+                ("Муниципалитетов", len({a.municipality for a in athletes})),
+                ("Организаций", len({e["organization"] for e in latest.entries})),
+                ("Судейская коллегия", f"{len(judges)} чел." if judges else "не назначена"),
+                ("Протокол", f"редакция {latest.version} от {latest.created_at:%d.%m.%Y}"),
+            ],
+            outro=(
+                ["Исправления протокола после публикации:", *corrections]
+                if corrections
+                else ["Исправлений протокола после публикации не было."]
+            )
+            + ["Замечания и предложения главного судьи: ________________________________"],
+            signatures=[
+                (CHIEF, by_position(CHIEF)),
+                ("Главный секретарь", by_position("Главный секретарь")),
+            ],
+        ),
+        fmt,
+        f"chief-report-{comp.id}",
+    )
+
+
 @router.get("/exports/athlete/{athlete_id}.{fmt}")
 def athlete_report(
     athlete_id: int,

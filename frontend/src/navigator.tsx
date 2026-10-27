@@ -48,6 +48,9 @@ export function Navigator() {
           <FspLogo className="brand-logo" />
         </Link>
         <div className="title-actions">
+          <Link className="btn btn-ghost" to="/glossary">
+            Справочник
+          </Link>
           <Link className="btn btn-ghost" to="/login">
             Войти
           </Link>

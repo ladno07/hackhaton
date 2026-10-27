@@ -286,7 +286,7 @@ class SuspensionIn(Strict):
 class EvskIn(Strict):
     discipline_id: int
     level: Level
-    rank_name: str = Field(min_length=2, max_length=100)
+    rank_name: str = Field(min_length=1, max_length=100)
     max_place: int = Field(ge=1)
     min_participants: int = Field(ge=1)
     source: str = Field(min_length=10, max_length=2000)

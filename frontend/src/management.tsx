@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Archive,
@@ -585,13 +585,13 @@ export function Registry() {
   );
 }
 
-function RankRequest({ onDone }: any) {
+function RankRequest({ onDone, initial = {} }: any) {
   const { role } = useAuth();
   const results = useData("/results", role !== "judge");
   const action = useAction();
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState(initial.result || "");
   const [name, setName] = useState(
-    role === "judge" ? "Судья третьей категории" : "III",
+    initial.rank || (role === "judge" ? "Судья третьей категории" : "III"),
   );
   const [kind, setKind] = useState("assignment");
   return (
@@ -750,7 +750,13 @@ export function Ranks() {
   const list = useData("/rank-applications");
   const current = useData("/ranks");
   const candidates = useData("/evsk-candidates", role === "admin");
-  const [show, setShow] = useState(false);
+  // Личный путь открывает форму с готовым основанием: ?result=…&rank=…
+  const [params] = useSearchParams();
+  const initial = {
+    result: params.get("result") || "",
+    rank: params.get("rank") || "",
+  };
+  const [show, setShow] = useState(role !== "admin" && !!initial.result);
   const [review, setReview] = useState<any>(null);
   return (
     <>
@@ -894,7 +900,7 @@ export function Ranks() {
         </section>
       )}
       <Dialog open={show} onOpenChange={setShow} title="Заявка на квалификацию">
-        <RankRequest onDone={() => setShow(false)} />
+        <RankRequest initial={initial} onDone={() => setShow(false)} />
       </Dialog>
       <Dialog
         open={!!review}
