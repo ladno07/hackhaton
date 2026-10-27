@@ -41,6 +41,7 @@ import {
   Table,
 } from "./components/shared";
 import { PassportPanel } from "./passport-panel";
+import { auditDetails, auditEntity } from "./audit-details";
 const attentionGroups: [string, string, string][] = [
   ["applications", "Заявки на соревнования", "/competitions"],
   ["rank_applications", "Заявки на разряды и категории", "/ranks"],
@@ -1139,13 +1140,22 @@ export function Audit() {
                     <td>
                       <strong>{x.action}</strong>
                       <small>
-                        {x.entity} #{x.entity_id}
+                        {auditEntity(x.entity, x.entity_id)}
                       </small>
                     </td>
                     <td>
-                      <code className="audit-detail">
-                        {JSON.stringify(x.details)}
-                      </code>
+                      {auditDetails(x.details).length ? (
+                        <dl className="audit-detail">
+                          {auditDetails(x.details).map(([label, value]) => (
+                            <div key={label}>
+                              <dt>{label}:</dt>
+                              <dd>{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <span className="muted">Нет дополнительных сведений</span>
+                      )}
                     </td>
                   </tr>
                 ))}

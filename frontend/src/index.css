@@ -1601,11 +1601,24 @@ td a:hover {
   margin-top: 9px;
 }
 .audit-detail {
-  font-size: 9px;
-  word-break: break-word;
-  max-width: 220px;
-  display: block;
-  color: var(--fsp-neutral-400);
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  max-width: 320px;
+  color: var(--fsp-neutral-600);
+}
+.audit-detail > div + div {
+  margin-top: 6px;
+}
+.audit-detail dt {
+  display: inline;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.audit-detail dd {
+  display: inline;
+  margin: 0;
 }
 .rating-explainer {
   display: flex;

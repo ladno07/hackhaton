@@ -1551,6 +1551,12 @@ function AgeGroups() {
 }
 export function Settings() {
   const users = useData("/users");
+  const [userSearch, setUserSearch] = useState("");
+  const searchTerms = userSearch.toLocaleLowerCase("ru").trim().split(/\s+/).filter(Boolean);
+  const filteredUsers = users.data?.filter((u: any) => {
+    const text = `${u.full_name} ${u.email}`.toLocaleLowerCase("ru");
+    return searchTerms.every((term) => text.includes(term));
+  });
   const rules = useData("/rating-rules");
   const meta = useData("/metadata");
   const evsk = useData("/evsk-rules");
@@ -1610,11 +1616,30 @@ export function Settings() {
         )}
         {tab === "users" && (
           <State query={users}>
-            <Table heads={["Пользователь", "Доступные роли", ""]}>
-              {users.data?.map((u: any) => (
-                <UserRoles key={u.id} u={u} />
-              ))}
-            </Table>
+            <div className="toolbar">
+              <SearchBox
+                value={userSearch}
+                onChange={setUserSearch}
+                placeholder="Поиск пользователей по имени или email"
+              />
+              <span className="inline-note" role="status">
+                Найдено: {filteredUsers?.length ?? 0} из {users.data?.length ?? 0}
+              </span>
+              {userSearch && (
+                <Button variant="ghost" onClick={() => setUserSearch("")}>
+                  Сбросить поиск
+                </Button>
+              )}
+            </div>
+            {filteredUsers?.length ? (
+              <Table heads={["Пользователь", "Доступные роли", ""]}>
+                {filteredUsers.map((u: any) => (
+                  <UserRoles key={u.id} u={u} />
+                ))}
+              </Table>
+            ) : (
+              <Empty text="Пользователи не найдены" hint="Измените имя или email либо сбросьте поиск." />
+            )}
           </State>
         )}
         {tab === "references" && (

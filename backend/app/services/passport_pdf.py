@@ -22,6 +22,7 @@ from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics import renderSVG
 from app.config import settings
+from app.services.documents import OfficialDocument, render_pdf, pdf_fonts
 
 
 def qr_drawing(url, size=105):
@@ -38,7 +39,73 @@ def qr_svg(url):
     return renderSVG.drawToString(qr_drawing(url, 240)).encode("utf-8")
 
 
+def certificate_pdf(data, url, *, certificate, private_access):
+    """Use the protocol letterhead and layout for QR participation documents."""
+    from datetime import date
+    from reportlab.lib.units import mm
+
+    pdf_fonts()
+    entry, competition = data["entry"], data["competition"]
+    number = data.get("certificate_number", "FSP-CERT-" + data["fingerprint"][:12].upper())
+    document = OfficialDocument(
+        kind="Справка" if certificate else "Выписка из протокола",
+        title="об участии в соревновании" if certificate else "о результате участия в соревновании",
+        dated=date.today(),
+        number=number,
+        place=settings.fsp_city,
+        meta=[
+            ("Соревнование", competition["title"]),
+            ("Дата проведения", date.fromisoformat(competition["start_date"]).strftime("%d.%m.%Y")),
+            ("Дисциплина", competition["discipline"]),
+            ("Место проведения", competition["location"]),
+            ("Основание", f"Опубликованный протокол, редакция {data['version']} от "
+             + date.fromisoformat(data["published_at"][:10]).strftime("%d.%m.%Y")),
+            ("Спортсмен", entry["full_name"]),
+            ("Идентификатор спортсмена", data["public_id"]),
+            ("Организация", entry["organization"]),
+        ],
+        intro=["Настоящая справка подтверждает участие спортсмена в указанном соревновании. "
+               "Сведения о результате приведены по опубликованной редакции протокола."],
+        headers=["№ п/п", "Место", "Баллы"],
+        rows=[[1, entry["place"], entry["score"]]],
+        signatures=[(settings.fsp_head_position, settings.fsp_head_name)],
+    )
+    if entry.get("team_name"):
+        document.meta.append(("Команда", entry["team_name"]))
+    if not data["is_current"]:
+        document.outro.append(
+            f"Редакция заменена. Актуальная редакция: {data['latest_version']}. "
+            "Проверяйте сведения по QR-коду."
+        )
+    body = ParagraphStyle("certificate-proof", fontName="Doc", fontSize=8, leading=11,
+                          spaceAfter=4)
+    p = lambda value: Paragraph(escape(str(value)), body)
+    proof = [
+        Paragraph("<b>Проверка справки по QR-коду</b>", body),
+        Paragraph('<link href="' + escape(url, {'"': '&quot;'})
+                  + '"><u>Открыть страницу проверки</u></link>', body),
+        p("QR открывает публичную проверку номера и статуса без персональных данных. "
+          "Полная справка доступна только в личном кабинете."
+          if private_access else "QR открывает страницу проверки сведений."),
+        p("SHA-256: " + data["fingerprint"][:32]),
+        p(data["fingerprint"][32:]),
+        p("Справка сформирована автоматически и не является официальным документом."),
+    ]
+    width = A4[0] - 40 * mm
+    verification = Table([[qr_drawing(url, 82), proof]], colWidths=[98, width - 98])
+    verification.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    out = BytesIO()
+    render_pdf(document, out, trailing_content=[KeepTogether([Spacer(1, 10), verification])])
+    return out.getvalue()
+
+
 def pdf_document(data, url, *, certificate=False, protocol=False, private_access=False):
+    if certificate or protocol:
+        return certificate_pdf(data, url, certificate=certificate, private_access=private_access)
     font = Path(settings.pdf_font)
     if not font.is_file():
         raise HTTPException(503, "Не найден PDF_FONT с поддержкой кириллицы")
@@ -98,120 +165,83 @@ def pdf_document(data, url, *, certificate=False, protocol=False, private_access
         ),
         Spacer(1, 15),
     ]
-    if certificate or protocol:
-        title = (
-            "Справка об участии"
-            if certificate
-            else "Выписка из опубликованного протокола"
+    story += [
+        para("Цифровой паспорт спортсмена", heading),
+        para(data["full_name"], section),
+        para(data["public_id"]),
+        para(f"{data['municipality']} · {data['organization']}"),
+        para("Дисциплины: " + "; ".join(d["name"] for d in data["disciplines"])),
+    ]
+    for rank in data["ranks"]:
+        story.append(
+            para(
+                f"{rank['discipline']}: {rank['name']} · до {rank['expires_on']}"
+                + ("" if rank["active"] else " · требует подтверждения")
+            )
         )
-        story += [
-            para(title, heading),
-            para(data["entry"]["full_name"], section),
-            para(data["public_id"]),
-            para(data["entry"]["organization"]),
-            para(data["competition"]["title"], section),
+    for rating in data["ratings"]:
+        story.append(
             para(
-                f"{data['competition']['start_date']} · {data['competition']['discipline']} · {data['competition']['location']}"
-            ),
-            para(f"Место: {data['entry']['place']} · Баллы: {data['entry']['score']}"),
+                f"Рейтинг {rating['season']} · {rating['discipline']}: {rating['points']} · место в регионе {rating['position']}"
+            )
+        )
+    if data["team"]:
+        story.append(
             para(
-                f"Редакция протокола: {data['version']} · Дата публикации: {data['published_at'][:10]}"
-            ),
-            para(
-                "Номер справки: "
-                + data.get(
-                    "certificate_number", "FSP-CERT-" + data["fingerprint"][:12].upper()
-                )
-            ),
-        ]
-        if data["entry"].get("team_name"):
-            story.append(para("Команда: " + data["entry"]["team_name"]))
-        if not data["is_current"]:
-            story.append(
-                para(
-                    f"Редакция заменена. Актуальная редакция: {data['latest_version']}. Проверяйте сведения по QR.",
-                    section,
+                "В сборной региона: "
+                + "; ".join(
+                    f"{t['discipline']} ({t['season']})" for t in data["team"]
                 )
             )
-        digest = data["fingerprint"]
-    else:
-        story += [
-            para("Цифровой паспорт спортсмена", heading),
-            para(data["full_name"], section),
-            para(data["public_id"]),
-            para(f"{data['municipality']} · {data['organization']}"),
-            para("Дисциплины: " + "; ".join(d["name"] for d in data["disciplines"])),
-        ]
-        for rank in data["ranks"]:
-            story.append(
-                para(
-                    f"{rank['discipline']}: {rank['name']} · до {rank['expires_on']}"
-                    + ("" if rank["active"] else " · требует подтверждения")
-                )
-            )
-        for rating in data["ratings"]:
-            story.append(
-                para(
-                    f"Рейтинг {rating['season']} · {rating['discipline']}: {rating['points']} · место в регионе {rating['position']}"
-                )
-            )
-        if data["team"]:
-            story.append(
-                para(
-                    "В сборной региона: "
-                    + "; ".join(
-                        f"{t['discipline']} ({t['season']})" for t in data["team"]
-                    )
-                )
-            )
-        if data.get("rusada"):
-            story.append(para("Курс РУСАДА пройден: " + data["rusada"]["completed_on"]))
-        if data["visibility"]["results"]:
-            story.append(para("История выступлений", section))
-            if data["results"]:
-                rows = [
-                    [
-                        para(x, tiny)
-                        for x in ["Дата", "Соревнование / дисциплина", "Место", "Баллы"]
-                    ]
+        )
+    if data.get("rusada"):
+        story.append(para("Курс РУСАДА пройден: " + data["rusada"]["completed_on"]))
+    if data["visibility"]["results"]:
+        story.append(para("История выступлений", section))
+        if data["results"]:
+            rows = [
+                [
+                    para(x, tiny)
+                    for x in ["Дата", "Соревнование / дисциплина", "Место", "Баллы"]
                 ]
-                rows += [
-                    [
-                        para(r["start_date"], tiny),
-                        para(r["title"] + " · " + r["discipline"], tiny),
-                        para(r["place"]),
-                        para(r["score"]),
-                    ]
-                    for r in data["results"]
+            ]
+            rows += [
+                [
+                    para(r["start_date"], tiny),
+                    para(r["title"] + " · " + r["discipline"], tiny),
+                    para(r["place"]),
+                    para(r["score"]),
                 ]
-                table = Table(
-                    rows,
-                    colWidths=[66, 300, 42, A4[0] - 76 - 408],
-                    repeatRows=1,
-                    hAlign="LEFT",
+                for r in data["results"]
+            ]
+            table = Table(
+                rows,
+                colWidths=[66, 300, 42, A4[0] - 76 - 408],
+                repeatRows=1,
+                hAlign="LEFT",
+            )
+            table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3E7E8")),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        (
+                            "ROWBACKGROUNDS",
+                            (0, 1),
+                            (-1, -1),
+                            [colors.white, colors.HexColor("#F5F6F8")],
+                        ),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                        ("TOPPADDING", (0, 0), (-1, -1), 7),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                    ]
                 )
-                table.setStyle(
-                    TableStyle(
-                        [
-                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3E7E8")),
-                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                            (
-                                "ROWBACKGROUNDS",
-                                (0, 1),
-                                (-1, -1),
-                                [colors.white, colors.HexColor("#F5F6F8")],
-                            ),
-                            ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                            ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-                            ("TOPPADDING", (0, 0), (-1, -1), 7),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-                        ]
-                    )
-                )
-                story.append(table)
-            else:
-                story.append(para("Пока нет опубликованных выступлений"))
-        digest = data["fingerprint"]
+            )
+            story.append(table)
+        else:
+            story.append(para("Пока нет опубликованных выступлений"))
+    digest = data["fingerprint"]
     from datetime import date
 
     proof_text = [

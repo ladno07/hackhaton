@@ -199,7 +199,7 @@ def pdf_fonts():
         )
 
 
-def render_pdf(doc, out):
+def render_pdf(doc, out, *, trailing_content=()):
     pdf_fonts()
     page_w, page_h = A4
     left, right = 25 * mm, 15 * mm
@@ -338,6 +338,7 @@ def render_pdf(doc, out):
     else:
         story += body + signatures
 
+    story.extend(trailing_content)
     generated = f"{date.today():%d.%m.%Y}"
 
     def footer(canvas, pdf):
