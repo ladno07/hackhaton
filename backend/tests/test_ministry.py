@@ -28,7 +28,8 @@ def test_ministry_reads_statistics(env):
             select(Competition).where(Competition.state == "published")
         ).first()
         drafts = {
-            c.id for c in db.scalars(select(Competition).where(Competition.state == "draft"))
+            c.id
+            for c in db.scalars(select(Competition).where(Competition.state == "draft"))
         }
 
     for url in [
@@ -48,6 +49,13 @@ def test_ministry_reads_statistics(env):
     ]:
         assert client.get(url, headers=h).status_code == 200, url
 
+    results = client.get("/api/results", headers=h).json()
+    assert results and all(not r["can_download_certificate"] for r in results)
+    rid = results[0]["id"]
+    assert client.get(f"/api/results/{rid}/certificate", headers=h).status_code == 403
+    assert (
+        client.get(f"/api/results/{rid}/certificate.pdf", headers=h).status_code == 403
+    )
     assert client.get("/api/dashboard", headers=h).json()["athletes"] == athletes
     listed = {c["id"] for c in client.get("/api/competitions", headers=h).json()}
     assert listed and not listed & drafts
@@ -103,7 +111,9 @@ def test_ministry_cannot_change_or_see_internal_data(env):
         assert res.json()["detail"] == READ_ONLY, url
 
     with factory() as db:
-        user_id = db.scalar(select(User.id).where(User.email == "minsport@demo.example"))
+        user_id = db.scalar(
+            select(User.id).where(User.email == "minsport@demo.example")
+        )
         db.add(
             Notification(
                 user_id=user_id,

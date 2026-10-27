@@ -10,9 +10,11 @@ depends_on = None
 
 
 def upgrade():
-    bind = op.get_bind()
-    if not bind.execute(sa.text("SELECT 1 FROM roles WHERE id = 'ministry'")).first():
-        bind.execute(sa.text("INSERT INTO roles (id, name) VALUES ('ministry', 'Минспорт')"))
+    op.execute(
+        sa.text(
+            "INSERT INTO roles (id, name) SELECT 'ministry', 'Минспорт' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE id = 'ministry')"
+        )
+    )
 
 
 def downgrade():

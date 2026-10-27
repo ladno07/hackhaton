@@ -24,8 +24,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useAction, useAuth, useData } from "./state";
-import { chartColors, date, formats, roleNames, sexNames, today } from "./lib";
+import { useAction, useAuth, useData, useToast } from "./state";
+import { chartColors, date, download, formats, roleNames, sexNames, today } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
@@ -40,6 +40,8 @@ import {
   State,
   Table,
 } from "./components/shared";
+import { PassportPanel } from "./passport-panel";
+import { auditDetails, auditEntity } from "./audit-details";
 const attentionGroups: [string, string, string][] = [
   ["applications", "Заявки на соревнования", "/competitions"],
   ["rank_applications", "Заявки на разряды и категории", "/ranks"],
@@ -407,6 +409,7 @@ export function History() {
   // Минспорт видит протоколы, но не персональные отчёты каждого спортсмена
   const personal = role !== "ministry";
   const q = useData("/results");
+  const toast = useToast();
   const a = useData("/athletes?mine=true", personal);
   const [search, setSearch] = useState("");
   return (
@@ -428,6 +431,7 @@ export function History() {
                 "Место",
                 "Баллы",
                 "Протокол",
+                ...(personal ? ["Справка об участии"] : []),
               ]}
             >
               {q.data
@@ -439,7 +443,12 @@ export function History() {
                 .map((r: any) => (
                   <tr key={r.id}>
                     <td>
-                      <strong>{r.full_name}</strong>
+                      <Link
+                        className="text-link"
+                        to={`/athletes/${r.athlete_id}/profile`}
+                      >
+                        <strong>{r.full_name}</strong>
+                      </Link>
                       <small>{r.title}</small>
                     </td>
                     <td>{date(r.start_date)}</td>
@@ -455,6 +464,38 @@ export function History() {
                         name={"protocol-" + r.competition_id}
                       />
                     </td>
+                    {personal && (
+                    <td>
+                      {r.can_download_certificate ? (
+                        <div className="row-actions">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              download(
+                                `/results/${r.id}/certificate.pdf`,
+                                `certificate-${r.id}.pdf`,
+                              ).catch(() =>
+                                toast(
+                                  "Не удалось скачать справку: проверьте доступ к результату",
+                                  true,
+                                ),
+                              )
+                            }
+                          >
+                            Скачать PDF
+                          </Button>
+                          <Button size="sm" variant="ghost" asChild>
+                            <Link to={`/certificates/${r.id}`}>
+                              Открыть справку
+                            </Link>
+                          </Button>
+                        </div>
+                      ) : (
+                        <span>Недоступно по текущей связи</span>
+                      )}
+                    </td>
+                    )}
                   </tr>
                 ))}
             </Table>
@@ -751,6 +792,7 @@ export function Profile() {
 }
 
 function AthleteProfile({ user }: any) {
+  const toast = useToast();
   const q = useData("/athletes/" + user.athlete_id);
   return (
     <>
@@ -765,6 +807,35 @@ function AthleteProfile({ user }: any) {
           </State>
         </section>
         <aside>
+          <PassportPanel user={user} />
+          <section className="panel info-card section-gap">
+            <h2>Мой ID спортсмена</h2>
+            <p>
+              Передайте ID капитану, чтобы он пригласил именно вас в команду.
+            </p>
+            <Field label="Публичный ID спортсмена">
+              <input
+                readOnly
+                value={q.data?.public_id || user.athlete_public_id || ""}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            </Field>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!q.data?.public_id}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(q.data.public_id);
+                  toast("ID скопирован");
+                } catch {
+                  toast("Выделите ID и скопируйте его через Ctrl+C", true);
+                }
+              }}
+            >
+              Скопировать ID
+            </Button>
+          </section>
           <section className="panel info-card">
             <ShieldCheck className="text-primary" />
             <h2>Согласия и документы</h2>
@@ -829,7 +900,13 @@ export function Coaching() {
               {q.data.map((l: any) => (
                 <tr key={l.id}>
                   <td>
-                    <strong>{l.athlete}</strong>
+                    <Link
+                      className="text-link"
+                      to={`/athletes/${l.athlete_id}/profile`}
+                    >
+                      <strong>{l.athlete}</strong>
+                    </Link>
+                    <small>{l.athlete_public_id}</small>
                     <details>
                       <summary>История связи</summary>
                       {l.history.map((h: any) => (
@@ -989,6 +1066,14 @@ export function Notifications() {
                 <div>
                   <h3>{n.title}</h3>
                   <p>{n.body}</p>
+                  {n.event_key.startsWith("competition-team:") && (
+                    <Link
+                      className="text-link"
+                      to={`/competitions/${n.event_key.split(":")[1]}?tab=teams`}
+                    >
+                      Открыть команду
+                    </Link>
+                  )}
                   <small>
                     {date(n.created_at)} ·{" "}
                     {n.mailed_at
@@ -1055,13 +1140,22 @@ export function Audit() {
                     <td>
                       <strong>{x.action}</strong>
                       <small>
-                        {x.entity} #{x.entity_id}
+                        {auditEntity(x.entity, x.entity_id)}
                       </small>
                     </td>
                     <td>
-                      <code className="audit-detail">
-                        {JSON.stringify(x.details)}
-                      </code>
+                      {auditDetails(x.details).length ? (
+                        <dl className="audit-detail">
+                          {auditDetails(x.details).map(([label, value]) => (
+                            <div key={label}>
+                              <dt>{label}:</dt>
+                              <dd>{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <span className="muted">Нет дополнительных сведений</span>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -170,6 +170,12 @@ def visible_in_role(db, actor, notice):
     kind = parts[0]
     if actor.role == "ministry":
         return kind in MINISTRY_EVENTS or notice.event_key.startswith("deadline:comp:")
+    if kind == "passport-consent":
+        return False
+    if kind == "passport-consent-decision":
+        return actor.role == "athlete"
+    if kind == "competition-team":
+        return actor.role in {"athlete", "coach"}
     if kind in {"application", "rank-application"}:
         return False
     if kind == "deadline":

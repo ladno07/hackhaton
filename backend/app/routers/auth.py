@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db import get_db
@@ -6,8 +6,18 @@ from app.models import *
 from app.schemas import Login, Register
 from app.security import Actor, current_actor, password_hash, token
 from app.services.common import audit
+from app.services.athlete_ids import public_athlete_id
 
-router = APIRouter(prefix="/auth", tags=["Авторизация"])
+from app.services.login_sessions import (
+    session_origin,
+    create_session,
+    forget_session,
+    session_user,
+)
+
+router = APIRouter(
+    prefix="/auth", tags=["Авторизация"], dependencies=[Depends(session_origin)]
+)
 DUMMY_HASH = password_hash.hash("dummy-password-not-a-user")
 
 
@@ -32,11 +42,16 @@ def user_view(db, user):
         "guardian_name": user.guardian_name,
         "guardian_consent_at": user.guardian_consent_at,
         **profiles,
+        "athlete_public_id": public_athlete_id(profiles["athlete_id"])
+        if profiles["athlete_id"]
+        else None,
     }
 
 
 @router.post("/register", status_code=201)
-def register(data: Register, db: Session = Depends(get_db)):
+def register(
+    data: Register, request: Request, response: Response, db: Session = Depends(get_db)
+):
     email = str(data.email).lower()
     if db.scalar(select(User.id).where(User.email == email)):
         raise HTTPException(409, "Этот email уже зарегистрирован")
@@ -64,15 +79,18 @@ def register(data: Register, db: Session = Depends(get_db)):
         user,
         {"consent_version": user.consent_version},
     )
+    session_id = create_session(db, user, request, response)
     return {
-        "access_token": token(user),
+        "access_token": token(user, session_id),
         "token_type": "bearer",
         "user": user_view(db, user),
     }
 
 
 @router.post("/login")
-def login(data: Login, db: Session = Depends(get_db)):
+def login(
+    data: Login, request: Request, response: Response, db: Session = Depends(get_db)
+):
     user = db.scalar(select(User).where(User.email == str(data.email).lower()))
     valid = password_hash.verify(
         data.password, user.password_hash if user else DUMMY_HASH
@@ -80,8 +98,9 @@ def login(data: Login, db: Session = Depends(get_db)):
     if not user or not valid:
         raise HTTPException(401, "Неверный email или пароль")
     audit(db, Actor(user, user.roles[0].id), "Вход в систему", user)
+    session_id = create_session(db, user, request, response)
     return {
-        "access_token": token(user),
+        "access_token": token(user, session_id),
         "token_type": "bearer",
         "user": user_view(db, user),
     }
@@ -90,3 +109,19 @@ def login(data: Login, db: Session = Depends(get_db)):
 @router.get("/me")
 def me(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
     return user_view(db, actor.user)
+
+
+@router.post("/refresh")
+def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
+    user, session_id = session_user(db, request)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "access_token": token(user, session_id),
+        "token_type": "bearer",
+        "user": user_view(db, user),
+    }
+
+
+@router.post("/logout", status_code=204)
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    forget_session(db, request, response)

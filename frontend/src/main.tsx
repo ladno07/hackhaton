@@ -6,6 +6,7 @@ import { AuthProvider, ToastProvider } from "./state";
 import App from "./App";
 import "./styles/tokens.css";
 import "./index.css";
+import "./passport.css";
 const client = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 15000, refetchOnWindowFocus: false },

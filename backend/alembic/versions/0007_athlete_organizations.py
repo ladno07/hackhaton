@@ -1,6 +1,5 @@
 """History of athlete transfers between organizations."""
 
-from datetime import date
 from alembic import op
 import sqlalchemy as sa
 
@@ -32,23 +31,32 @@ def upgrade():
     )
     # Before the history existed the current organization was the only fact:
     # assume the athlete has been there since the first year of training.
-    rows = op.get_bind().execute(
-        sa.text(
-            "SELECT a.id, a.organization_id, MIN(d.start_year) FROM athletes a "
-            "LEFT JOIN athlete_disciplines d ON d.athlete_id = a.id "
-            "WHERE a.organization_id IS NOT NULL GROUP BY a.id, a.organization_id"
-        )
+    athletes = sa.table("athletes", sa.column("id"), sa.column("organization_id"))
+    disciplines = sa.table(
+        "athlete_disciplines", sa.column("athlete_id"), sa.column("start_year")
     )
-    op.bulk_insert(
-        table,
-        [
-            {
-                "athlete_id": athlete_id,
-                "organization_id": organization_id,
-                "start_date": date(first_year, 1, 1) if first_year else date.today(),
-            }
-            for athlete_id, organization_id, first_year in rows
-        ],
+    year_text = sa.cast(sa.func.min(disciplines.c.start_year), sa.String()) + "-01-01"
+    year_date = (
+        sa.func.date(year_text)
+        if op.get_bind().dialect.name == "sqlite"
+        else sa.cast(year_text, sa.Date())
+    )
+    query = (
+        sa.select(
+            athletes.c.id,
+            athletes.c.organization_id,
+            sa.func.coalesce(year_date, sa.func.current_date()),
+        )
+        .select_from(
+            athletes.outerjoin(disciplines, disciplines.c.athlete_id == athletes.c.id)
+        )
+        .where(athletes.c.organization_id.is_not(None))
+        .group_by(athletes.c.id, athletes.c.organization_id)
+    )
+    op.execute(
+        table.insert().from_select(
+            ["athlete_id", "organization_id", "start_date"], query
+        )
     )
 
 

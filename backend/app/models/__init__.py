@@ -6,6 +6,9 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    text,
     Integer,
     JSON,
     LargeBinary,
@@ -186,6 +189,13 @@ class Competition(Base):
     __table_args__ = (
         CheckConstraint("end_date >= start_date"),
         CheckConstraint("min_age <= max_age"),
+        CheckConstraint(
+            "entry_mode IN ('individual','team')", name="ck_comp_entry_mode"
+        ),
+        CheckConstraint(
+            "team_min >= 1 AND team_max >= team_min AND team_max <= 50",
+            name="ck_comp_team_size",
+        ),
         CheckConstraint("state IN ('draft','open','closed','published')"),
         CheckConstraint("status IN ('regional','interregional','national')"),
         CheckConstraint(
@@ -212,6 +222,14 @@ class Competition(Base):
     regulation_url: Mapped[str | None] = mapped_column(Text)
     state: Mapped[str] = mapped_column(String(20), default="draft")
     revision: Mapped[int] = mapped_column(Integer, default=0)
+    entry_mode: Mapped[str] = mapped_column(
+        String(20), default="individual", server_default="individual"
+    )
+    team_min: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
+    team_max: Mapped[int] = mapped_column(Integer, default=3, server_default="3")
+    team_rating: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
 
 
 class AgeGroup(Base):
@@ -254,9 +272,7 @@ class CompetitionRegulation(Base):
     size: Mapped[int] = mapped_column(Integer)
     data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
     uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-    uploaded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=now
-    )
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class CompetitionApplication(Base):
@@ -431,3 +447,126 @@ class Deadline(Base):
     title: Mapped[str] = mapped_column(String(240))
     due_on: Mapped[date] = mapped_column(Date)
     done: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class CompetitionTeam(Base):
+    __tablename__ = "competition_teams"
+    __table_args__ = (
+        UniqueConstraint("id", "competition_id"),
+        UniqueConstraint("competition_id", "name"),
+        CheckConstraint(
+            "status IN ('draft','pending','approved','returned','cancelled')"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    captain_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    comment: Mapped[str] = mapped_column(Text, default="")
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class CompetitionTeamMember(Base):
+    __tablename__ = "competition_team_members"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["team_id", "competition_id"],
+            ["competition_teams.id", "competition_teams.competition_id"],
+        ),
+        UniqueConstraint("team_id", "athlete_id"),
+        CheckConstraint("status IN ('invited','accepted','declined')"),
+        Index(
+            "uq_team_accepted_athlete",
+            "competition_id",
+            "athlete_id",
+            unique=True,
+            postgresql_where=text("status = 'accepted'"),
+            sqlite_where=text("status = 'accepted'"),
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    team_id: Mapped[int] = mapped_column(Integer)
+    competition_id: Mapped[int] = mapped_column(Integer)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    status: Mapped[str] = mapped_column(String(20), default="invited")
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PassportPublication(Base):
+    __tablename__ = "passport_publications"
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), primary_key=True)
+    slug: Mapped[str | None] = mapped_column(String(64), unique=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    show_results: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_rating: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_team: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_rusada: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    show_ranks: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_disciplines: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_organization: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_municipality: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    show_training_stage: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    show_training_years: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consent_version: Mapped[str | None] = mapped_column(String(30))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class PassportGuardianConsent(Base):
+    __tablename__ = "passport_guardian_consents"
+    __table_args__ = (CheckConstraint("status IN ('pending','approved','rejected')"),)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), primary_key=True)
+    guardian_name: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    filename: Mapped[str] = mapped_column(String(255))
+    document: Mapped[bytes] = mapped_column(LargeBinary)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    comment: Mapped[str] = mapped_column(Text, default="")
+
+
+class PublicProtocolProof(Base):
+    __tablename__ = "public_protocol_proofs"
+    __table_args__ = (UniqueConstraint("publication_slug", "protocol_version_id"),)
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
+    protocol_version_id: Mapped[int] = mapped_column(ForeignKey("protocol_versions.id"))
+    publication_slug: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

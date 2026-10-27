@@ -43,6 +43,16 @@ def dashboard(actor: Actor = Depends(current_actor), db: Session = Depends(get_d
             )
         else:
             rank_query = rank_query.where(RankApplication.athlete_id.in_(ids))
+    team_query = select(CompetitionTeam.id).where(CompetitionTeam.status == "pending")
+    if actor.role != "admin":
+        team_query = team_query.where(
+            CompetitionTeam.id.in_(
+                select(CompetitionTeamMember.team_id).where(
+                    CompetitionTeamMember.athlete_id.in_(ids)
+                )
+            )
+        )
+    pending_teams = len(db.scalars(team_query).all())
     judge_id = own(db, Judge, actor).id if actor.role == "judge" else None
     assignments = (
         db.scalar(
@@ -78,7 +88,7 @@ def dashboard(actor: Actor = Depends(current_actor), db: Session = Depends(get_d
             .select_from(Competition)
             .where(Competition.state != "draft")
         ),
-        "applications": len(db.scalars(query).all()),
+        "applications": len(db.scalars(query).all()) + pending_teams,
         "rank_applications": len(db.scalars(rank_query).all()),
         "results": db.scalar(
             select(func.count())

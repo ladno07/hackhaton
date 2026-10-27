@@ -1,11 +1,29 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, errorText } from "./lib";
+import { api, errorText, refreshSession, endSession } from "./lib";
 const AuthContext = createContext<any>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const [token, setToken] = useState(sessionStorage.getItem("token"));
-  const [role, setRole] = useState(sessionStorage.getItem("role") || "athlete");
+  const [role, setRole] = useState(sessionStorage.getItem("role") || localStorage.getItem("orencode.role") || "athlete");
+  const [restoring, setRestoring] = useState(!token);
+  useEffect(() => {
+    const updated = (event: Event) => {
+      if ((event as CustomEvent).detail?.accountChanged) qc.clear();
+      setToken(sessionStorage.getItem("token"));
+      setRole(sessionStorage.getItem("role") || "athlete");
+    };
+    const ended = () => { setToken(null); qc.clear(); };
+    window.addEventListener("orencode:session-refreshed", updated);
+    window.addEventListener("orencode:session-ended", ended);
+    if (!sessionStorage.getItem("token")) {
+      refreshSession().catch(() => {}).finally(() => setRestoring(false));
+    } else setRestoring(false);
+    return () => {
+      window.removeEventListener("orencode:session-refreshed", updated);
+      window.removeEventListener("orencode:session-ended", ended);
+    };
+  }, [qc]);
   const me = useQuery({
     queryKey: ["me", token],
     queryFn: async () => (await api.get("/auth/me")).data,
@@ -13,20 +31,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     retry: false,
   });
   function login(data: any) {
+    sessionStorage.setItem("orencode.user", String(data.user.id));
     sessionStorage.setItem("token", data.access_token);
     sessionStorage.setItem("role", data.user.roles[0]);
+    localStorage.setItem("orencode.role", data.user.roles[0]);
     setRole(data.user.roles[0]);
     setToken(data.access_token);
     qc.clear();
   }
-  function logout() {
+  async function logout() {
+    try { await endSession(); } catch {
+      window.alert("Не удалось завершить сессию. Проверьте соединение и повторите выход.");
+      return;
+    }
+    localStorage.removeItem("orencode.role");
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("role");
+    sessionStorage.removeItem("orencode.user");
     setToken(null);
     qc.clear();
   }
   function switchRole(r: string) {
     sessionStorage.setItem("role", r);
+    localStorage.setItem("orencode.role", r);
     setRole(r);
     qc.clear();
   }
@@ -39,7 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         switchRole,
-        loading: me.isPending,
+        restoring,
+        loading: restoring || me.isPending,
         error: me.error,
       }}
     >
@@ -77,11 +105,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 export const useToast = () => useContext(ToastContext);
 export function useData(url: string, enabled = true) {
-  const { role } = useAuth();
+  const { role, token, restoring } = useAuth();
   return useQuery<any>({
     queryKey: [role, url],
     queryFn: async () => (await api.get(url)).data,
-    enabled,
+    enabled: enabled && !!token && !restoring,
     retry: 1,
   });
 }

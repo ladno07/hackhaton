@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -47,6 +47,7 @@ import {
   State,
   Table,
 } from "./components/shared";
+import { CompetitionTeams, TeamResultsEditor } from "./competition-teams";
 const REGULATION_ACCEPT = ".pdf,.docx,.doc,.odt";
 const REGULATION_MAX_MB = 10;
 const fileSize = (n: number) =>
@@ -182,6 +183,10 @@ export function CompetitionForm({ initial, onSaved }: any) {
     initial
       ? Object.fromEntries(
           [
+            "entry_mode",
+            "team_min",
+            "team_max",
+            "team_rating",
             "title",
             "discipline_id",
             "type_id",
@@ -206,6 +211,10 @@ export function CompetitionForm({ initial, onSaved }: any) {
             ]),
         )
       : {
+          entry_mode: "individual",
+          team_min: 2,
+          team_max: 3,
+          team_rating: false,
           title: "",
           discipline_id: 1,
           type_id: 1,
@@ -268,6 +277,37 @@ export function CompetitionForm({ initial, onSaved }: any) {
       }}
     >
       {field("title", "Название соревнования")}
+      <Field label="Зачёт">
+        <select
+          value={v.entry_mode}
+          onChange={(e) => set("entry_mode", e.target.value)}
+        >
+          <option value="individual">Личный</option>
+          <option value="team">Командный</option>
+        </select>
+      </Field>
+      {v.entry_mode === "team" && (
+        <>
+          <div className="form-grid">
+            {field("team_min", "Минимум участников в команде", "number", {
+              min: 1,
+              max: 50,
+            })}
+            {field("team_max", "Максимум участников в команде", "number", {
+              min: v.team_min,
+              max: 50,
+            })}
+          </div>
+          <label className="check-line">
+            <input
+              type="checkbox"
+              checked={v.team_rating}
+              onChange={(e) => set("team_rating", e.target.checked)}
+            />
+            Начислять каждому участнику личный рейтинг за место команды
+          </label>
+        </>
+      )}
       <div className="form-grid">
         <Field label="Дисциплина">
           <select
@@ -577,7 +617,14 @@ export function Competitions() {
     </>
   );
 }
-function ResultsEditor({ comp, correction, onDone }: any) {
+function ResultsEditor(props: any) {
+  return props.comp.entry_mode === "team" ? (
+    <TeamResultsEditor {...props} />
+  ) : (
+    <IndividualResultsEditor {...props} />
+  );
+}
+function IndividualResultsEditor({ comp, correction, onDone }: any) {
   const approved = comp.applications.filter(
     (a: any) => a.status === "approved",
   );
@@ -608,12 +655,14 @@ function ResultsEditor({ comp, correction, onDone }: any) {
             method: correction ? "put" : "post",
             url: "/competitions/" + comp.id + "/results",
             data: {
-              results: results.map(({ athlete_id, place, score, team_name }) => ({
-                athlete_id,
-                place,
-                score,
-                team_name: team_name.trim() || null,
-              })),
+              results: results.map(
+                ({ athlete_id, place, score, team_name }) => ({
+                  athlete_id,
+                  place,
+                  score,
+                  team_name: team_name.trim() || null,
+                }),
+              ),
               ...(correction ? { reason } : {}),
             },
           });
@@ -639,7 +688,14 @@ function ResultsEditor({ comp, correction, onDone }: any) {
       <Table heads={["Спортсмен", "Команда", "Место", "Баллы"]}>
         {results.map((r: any, i: number) => (
           <tr key={r.athlete_id}>
-            <td>{r.full_name}</td>
+            <td>
+              <Link
+                className="text-link"
+                to={`/athletes/${r.athlete_id}/profile`}
+              >
+                {r.full_name}
+              </Link>
+            </td>
             <td>
               <input
                 aria-label={"Команда: " + r.full_name}
@@ -769,13 +825,18 @@ export function CompetitionDetail() {
   );
   const judges = useData("/judges", role === "admin");
   const action = useAction();
-  const [tab, setTab] = useState("applications");
+  const [searchParams] = useSearchParams();
+  const [selectedTab, setTab] = useState(
+    searchParams.get("tab") === "teams" ? "teams" : "",
+  );
   const [edit, setEdit] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [athlete, setAthlete] = useState("");
   const [judge, setJudge] = useState("");
   const [position, setPosition] = useState("Главный судья");
   const comp = query.data;
+  const tab =
+    selectedTab || (comp?.entry_mode === "team" ? "teams" : "applications");
   const teamProtocol = comp?.results.some((r: any) => r.team_name);
   const eligibility = useData(
     `/competitions/${id}/eligibility?athlete_id=${athlete}`,
@@ -846,6 +907,20 @@ export function CompetitionDetail() {
                 </Button>
               )}
             </PageTitle>
+            {comp.entry_mode === "team" && (
+              <div className="inline-note">
+                Командный зачёт · {comp.team_min}–{comp.team_max} участников.
+                Приглашения, состав и общая заявка — во вкладке{" "}
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => setTab("teams")}
+                >
+                  «Команды»
+                </button>
+                .
+              </div>
+            )}
             <div className="event-details-grid">
               <div className="panel event-info">
                 <div>
@@ -896,82 +971,85 @@ export function CompetitionDetail() {
                   <Regulation comp={comp} />
                 </div>
               </div>
-              {["athlete", "coach"].includes(role) && (
-                <form
-                  className="panel apply-panel"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    try {
-                      await action.mutateAsync({
-                        url: "/competitions/" + id + "/applications",
-                        data: {
-                          athlete_id:
-                            role === "athlete" ? user.athlete_id : +athlete,
-                        },
-                      });
-                    } catch {}
-                  }}
-                >
-                  <span className="eyebrow">ВАШ СЛЕДУЮЩИЙ СТАРТ</span>
-                  <h2>Участвовать в соревновании</h2>
-                  <p>
-                    Федерация рассмотрит заявку и сообщит решение в личном
-                    кабинете.
-                  </p>
-                  {role === "athlete" && (
-                    <AgeHint check={comp.age_check} self />
-                  )}
-                  {role === "coach" && eligibility.data && (
-                    <AgeHint check={eligibility.data} />
-                  )}
-                  {role === "coach" && (
-                    <Field label="Спортсмен">
-                      <select
-                        required
-                        value={athlete}
-                        onChange={(e) => setAthlete(e.target.value)}
-                      >
-                        <option value="">Выберите подопечного</option>
-                        {athletes.data?.map((a: any) => (
-                          <option key={a.id} value={a.id}>
-                            {a.full_name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  )}
-                  <Button
-                    disabled={
-                      action.isPending ||
-                      comp.state !== "open" ||
-                      comp.eligible === false ||
-                      (role === "coach" && eligibility.data?.eligible === false) ||
-                      comp.deadline < today() ||
-                      (role === "athlete" &&
-                        comp.applications.some(
-                          (a: any) => a.athlete_id === user.athlete_id,
-                        ))
-                    }
+              {comp.entry_mode !== "team" &&
+                ["athlete", "coach"].includes(role) && (
+                  <form
+                    className="panel apply-panel"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      try {
+                        await action.mutateAsync({
+                          url: "/competitions/" + id + "/applications",
+                          data: {
+                            athlete_id:
+                              role === "athlete" ? user.athlete_id : +athlete,
+                          },
+                        });
+                      } catch {}
+                    }}
                   >
-                    <Send size={16} />
-                    {comp.applications.some(
-                      (a: any) => a.athlete_id === user.athlete_id,
-                    )
-                      ? "Заявка уже подана"
-                      : comp.age_check?.reason === "sex_missing"
-                        ? "Укажите пол в профиле"
-                        : comp.eligible === false
-                          ? "Не подходит по возрасту"
-                          : comp.state === "open"
-                            ? "Подать заявку"
-                            : "Приём завершён"}
-                  </Button>
-                </form>
-              )}
+                    <span className="eyebrow">ВАШ СЛЕДУЮЩИЙ СТАРТ</span>
+                    <h2>Участвовать в соревновании</h2>
+                    <p>
+                      Федерация рассмотрит заявку и сообщит решение в личном
+                      кабинете.
+                    </p>
+                    {role === "athlete" && (
+                      <AgeHint check={comp.age_check} self />
+                    )}
+                    {role === "coach" && eligibility.data && (
+                      <AgeHint check={eligibility.data} />
+                    )}
+                    {role === "coach" && (
+                      <Field label="Спортсмен">
+                        <select
+                          required
+                          value={athlete}
+                          onChange={(e) => setAthlete(e.target.value)}
+                        >
+                          <option value="">Выберите подопечного</option>
+                          {athletes.data?.map((a: any) => (
+                            <option key={a.id} value={a.id}>
+                              {a.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+                    <Button
+                      disabled={
+                        action.isPending ||
+                        comp.state !== "open" ||
+                        comp.eligible === false ||
+                        (role === "coach" &&
+                          eligibility.data?.eligible === false) ||
+                        comp.deadline < today() ||
+                        (role === "athlete" &&
+                          comp.applications.some(
+                            (a: any) => a.athlete_id === user.athlete_id,
+                          ))
+                      }
+                    >
+                      <Send size={16} />
+                      {comp.applications.some(
+                        (a: any) => a.athlete_id === user.athlete_id,
+                      )
+                        ? "Заявка уже подана"
+                        : comp.age_check?.reason === "sex_missing"
+                          ? "Укажите пол в профиле"
+                          : comp.eligible === false
+                            ? "Не подходит по возрасту"
+                            : comp.state === "open"
+                              ? "Подать заявку"
+                              : "Приём завершён"}
+                    </Button>
+                  </form>
+                )}
             </div>
             <section className="panel section-gap">
               <div className="tabs">
                 {[
+                  ...(comp.entry_mode === "team" ? [["teams", "Команды"]] : []),
                   [
                     "applications",
                     role === "admin" || role === "ministry"
@@ -990,6 +1068,9 @@ export function CompetitionDetail() {
                   </button>
                 ))}
               </div>
+              {tab === "teams" && comp.entry_mode === "team" && (
+                <CompetitionTeams key={comp.id} comp={comp} />
+              )}
               {tab === "applications" &&
                 (comp.applications.length ? (
                   <Table
@@ -1004,7 +1085,12 @@ export function CompetitionDetail() {
                     {comp.applications.map((a: any) => (
                       <tr key={a.id}>
                         <td>
-                          <strong>{a.full_name}</strong>
+                          <Link
+                            className="text-link"
+                            to={`/athletes/${a.athlete_id}/profile`}
+                          >
+                            <strong>{a.full_name}</strong>
+                          </Link>
                         </td>
                         <td>{a.age_group || "—"}</td>
                         <td>{date(a.created_at)}</td>
@@ -1128,7 +1214,14 @@ export function CompetitionDetail() {
                             </span>
                           </td>
                           {teamProtocol && <td>{r.team_name || "—"}</td>}
-                          <td>{r.full_name}</td>
+                          <td>
+                            <Link
+                              className="text-link"
+                              to={`/athletes/${r.athlete_id}/profile`}
+                            >
+                              {r.full_name}
+                            </Link>
+                          </td>
                           <td>{r.score}</td>
                         </tr>
                       ))}

@@ -224,9 +224,16 @@ export function Registry() {
                           {a.full_name.replace("Демо · ", "").slice(0, 1)}
                         </span>
                         <div>
-                          <strong>{a.full_name.replace("Демо · ", "")}</strong>
+                          <Link
+                            className="text-link"
+                            to={`/athletes/${a.id}/profile`}
+                          >
+                            <strong>
+                              {a.full_name.replace("Демо · ", "")}
+                            </strong>
+                          </Link>
                           <small>
-                            {a.age} лет · ID {a.id}
+                            {a.age} лет · {a.public_id}
                           </small>
                         </div>
                       </div>
@@ -1010,7 +1017,12 @@ export function Ratings() {
                     </span>
                   </td>
                   <td>
-                    <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                    <Link
+                      className="text-link"
+                      to={`/athletes/${r.athlete_id}/profile`}
+                    >
+                      <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                    </Link>
                     <small>{r.age} лет</small>
                     <details>
                       <summary>Как рассчитан рейтинг</summary>
@@ -1090,7 +1102,12 @@ export function Ratings() {
         </div>
         {team.data?.map((t: any) => (
           <div className="simple-row" key={t.athlete_id}>
-            <span>{t.full_name}</span>
+            <Link
+              className="text-link"
+              to={`/athletes/${t.athlete_id}/profile`}
+            >
+              {t.full_name}
+            </Link>
             {!t.eligible && (
               <Badge value="rejected" label="Действует отстранение" />
             )}
@@ -1534,6 +1551,12 @@ function AgeGroups() {
 }
 export function Settings() {
   const users = useData("/users");
+  const [userSearch, setUserSearch] = useState("");
+  const searchTerms = userSearch.toLocaleLowerCase("ru").trim().split(/\s+/).filter(Boolean);
+  const filteredUsers = users.data?.filter((u: any) => {
+    const text = `${u.full_name} ${u.email}`.toLocaleLowerCase("ru");
+    return searchTerms.every((term) => text.includes(term));
+  });
   const rules = useData("/rating-rules");
   const meta = useData("/metadata");
   const evsk = useData("/evsk-rules");
@@ -1593,11 +1616,30 @@ export function Settings() {
         )}
         {tab === "users" && (
           <State query={users}>
-            <Table heads={["Пользователь", "Доступные роли", ""]}>
-              {users.data?.map((u: any) => (
-                <UserRoles key={u.id} u={u} />
-              ))}
-            </Table>
+            <div className="toolbar">
+              <SearchBox
+                value={userSearch}
+                onChange={setUserSearch}
+                placeholder="Поиск пользователей по имени или email"
+              />
+              <span className="inline-note" role="status">
+                Найдено: {filteredUsers?.length ?? 0} из {users.data?.length ?? 0}
+              </span>
+              {userSearch && (
+                <Button variant="ghost" onClick={() => setUserSearch("")}>
+                  Сбросить поиск
+                </Button>
+              )}
+            </div>
+            {filteredUsers?.length ? (
+              <Table heads={["Пользователь", "Доступные роли", ""]}>
+                {filteredUsers.map((u: any) => (
+                  <UserRoles key={u.id} u={u} />
+                ))}
+              </Table>
+            ) : (
+              <Empty text="Пользователи не найдены" hint="Измените имя или email либо сбросьте поиск." />
+            )}
           </State>
         )}
         {tab === "references" && (
