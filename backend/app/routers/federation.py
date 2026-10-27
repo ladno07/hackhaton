@@ -379,7 +379,8 @@ def list_deadlines(
     actor: Actor = Depends(current_actor), db: Session = Depends(get_db)
 ):
     today = date.today()
-    ids = visible_athletes(db, actor)
+    # The ministry follows the calendar, not every athlete's rank expiry.
+    ids = visible_athletes(db, actor) if actor.role != "ministry" else set()
     items = []
     for c in db.scalars(
         select(Competition).where(

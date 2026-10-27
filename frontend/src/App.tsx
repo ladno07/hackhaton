@@ -283,15 +283,15 @@ const navigation = [
     to: "/",
     label: "Обзор",
     icon: LayoutDashboard,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
     to: "/competitions",
     label: "Соревнования",
     icon: CalendarDays,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
-  { to: "/registry", label: "Реестр", icon: Users, roles: ["admin", "coach"] },
+  { to: "/registry", label: "Реестр", icon: Users, roles: ["admin", "coach", "ministry"] },
   {
     to: "/coaching",
     label: "Связи с тренерами",
@@ -302,7 +302,7 @@ const navigation = [
     to: "/history",
     label: "Результаты",
     icon: ChartNoAxesCombined,
-    roles: ["admin", "athlete", "coach"],
+    roles: ["admin", "athlete", "coach", "ministry"],
   },
   {
     to: "/assignments",
@@ -320,19 +320,19 @@ const navigation = [
     to: "/ranks",
     label: "Разряды и категории",
     icon: FileCheck2,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
     to: "/ratings",
     label: "Рейтинг и сборная",
     icon: Trophy,
-    roles: ["admin", "athlete", "coach", "judge"],
+    roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   {
     to: "/reports",
     label: "Аналитика и отчёты",
     icon: FileText,
-    roles: ["admin"],
+    roles: ["admin", "ministry"],
   },
   { to: "/audit", label: "Журнал действий", icon: Activity, roles: ["admin"] },
   { to: "/settings", label: "Управление", icon: Settings2, roles: ["admin"] },
@@ -518,7 +518,7 @@ export default function App() {
         <Route
           path="registry"
           element={
-            <Guard roles={["admin", "coach"]}>
+            <Guard roles={["admin", "coach", "ministry"]}>
               <Registry />
             </Guard>
           }
@@ -526,7 +526,7 @@ export default function App() {
         <Route
           path="history"
           element={
-            <Guard roles={["admin", "athlete", "coach"]}>
+            <Guard roles={["admin", "athlete", "coach", "ministry"]}>
               <History />
             </Guard>
           }
@@ -560,7 +560,7 @@ export default function App() {
         <Route
           path="reports"
           element={
-            <Guard roles={["admin"]}>
+            <Guard roles={["admin", "ministry"]}>
               <Reports />
             </Guard>
           }

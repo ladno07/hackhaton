@@ -751,7 +751,7 @@ export function Ranks() {
         title="Разряды и судейские категории"
         description="Заявки, основания присвоения и контроль сроков действия."
       >
-        {role !== "admin" && (
+        {role !== "admin" && role !== "ministry" && (
           <Button onClick={() => setShow(true)}>
             <Plus size={16} />
             Подать заявку
