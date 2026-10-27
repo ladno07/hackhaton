@@ -942,6 +942,14 @@ td a:hover {
 .topbar-user strong {
   font-weight: 600;
 }
+.topbar-user:hover strong {
+  color: var(--fsp-primary-600);
+}
+.topbar-user:focus-visible {
+  outline: 2px solid var(--fsp-primary-600);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
 .topbar-user small {
   display: block;
   color: var(--fsp-neutral-400);
