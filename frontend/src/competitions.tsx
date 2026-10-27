@@ -29,6 +29,7 @@ import {
   date,
   download,
   errorText,
+  fileSize,
   formats,
   groupLabel,
   levels,
@@ -50,10 +51,6 @@ import {
 import { CompetitionTeams, TeamResultsEditor } from "./competition-teams";
 const REGULATION_ACCEPT = ".pdf,.docx,.doc,.odt";
 const REGULATION_MAX_MB = 10;
-const fileSize = (n: number) =>
-  n < 1024 * 1024
-    ? Math.max(1, Math.round(n / 1024)) + " КБ"
-    : (n / 1024 / 1024).toFixed(1).replace(".", ",") + " МБ";
 const regulationForm = (file: File) => {
   const form = new FormData();
   form.append("file", file);
