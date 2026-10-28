@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
     public_site_url: str = "http://localhost:8080"
+    # Lets webhooks reach localhost and private networks (local demo receivers).
+    webhook_allow_private: bool = False
     pdf_font: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     # Letterhead of official documents. Requisites are fictitious demo values:
     # set the real ones through the environment.

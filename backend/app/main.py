@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import engine
 from app.routers import auth, registry, staff, competitions, federation, reports, public, telegram
 from app.routers import appeals, awards, competition_teams, documents, indicators, passports
-from app.routers import standards
+from app.routers import integrations, standards
 from app.services.notifications import worker
 
 
@@ -44,6 +44,7 @@ async def public_privacy_headers(request, call_next):
             "/api/my/documents",
             "/api/athlete-profiles/",
             "/api/results",
+            "/api/v1/",
         )
     ):
         response.headers["Cache-Control"] = "no-store"
@@ -84,6 +85,8 @@ for router in [
     awards.router,
     appeals.router,
     standards.router,
+    integrations.router,
+    integrations.api,
     public.router,
 ]:
     app.include_router(router, prefix="/api")

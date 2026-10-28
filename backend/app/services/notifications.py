@@ -194,6 +194,8 @@ def tick():
         deadlines(db)
         db.commit()
         deliver(db)
+        from app.services.integrations import deliver_webhooks
+        deliver_webhooks(db)
 
 
 async def worker():

@@ -492,3 +492,75 @@ class StageTransferIn(Strict):
         if self.decided_on > date.today():
             raise ValueError("Дата приказа не может быть в будущем")
         return self
+
+
+ApiScope = Literal["competitions:read", "applications:read", "results:read", "results:write"]
+WebhookEvent = Literal["competition.published", "application.approved", "protocol.published"]
+
+
+class ApiTokenIn(Strict):
+    name: str = Field(min_length=3, max_length=120)
+    scopes: list[ApiScope] = Field(min_length=1, max_length=4)
+    expires_on: date | None = None
+
+    @model_validator(mode="after")
+    def future(self):
+        if self.expires_on and self.expires_on <= date.today():
+            raise ValueError("Срок действия должен быть в будущем")
+        self.scopes = list(dict.fromkeys(self.scopes))
+        return self
+
+
+def check_webhook_url(value):
+    from app.services.integrations import check_url
+
+    check_url(str(value))
+
+
+class WebhookIn(Strict):
+    name: str = Field(min_length=3, max_length=120)
+    url: HttpUrl
+    events: list[WebhookEvent] = Field(min_length=1, max_length=3)
+
+    @model_validator(mode="after")
+    def safe_url(self):
+        check_webhook_url(self.url)
+        self.events = list(dict.fromkeys(self.events))
+        return self
+
+
+class WebhookPatch(Strict):
+    name: str | None = Field(None, min_length=3, max_length=120)
+    url: HttpUrl | None = None
+    events: list[WebhookEvent] | None = Field(None, min_length=1, max_length=3)
+    active: bool | None = None
+
+    @model_validator(mode="after")
+    def safe_url(self):
+        if self.url is not None:
+            check_webhook_url(self.url)
+        if self.events is not None:
+            self.events = list(dict.fromkeys(self.events))
+        return self
+
+
+class ImportRowIn(Strict):
+    """Athlete by FSP-000123 or internal id; team by id or name."""
+
+    athlete: str | None = Field(None, max_length=40, coerce_numbers_to_str=True)
+    team: str | None = Field(None, max_length=120, coerce_numbers_to_str=True)
+    place: int = Field(gt=0, le=100_000)
+    score: float = Field(ge=0, allow_inf_nan=False)
+    line: int | None = Field(None, exclude=True)
+
+    @model_validator(mode="after")
+    def one_subject(self):
+        if not self.athlete and not self.team:
+            raise ValueError("Укажите спортсмена или команду")
+        return self
+
+
+class ResultsImportIn(Strict):
+    results: list[ImportRowIn] = Field(min_length=1, max_length=10000)
+    # required when the protocol is already published: a new version is made
+    reason: str | None = Field(None, min_length=5, max_length=2000)

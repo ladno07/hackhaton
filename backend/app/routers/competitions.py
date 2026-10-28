@@ -32,6 +32,7 @@ from app.services.protocols import (
     rank_warnings,
     version_history,
 )
+from app.services import integrations
 from app.services.age_groups import (
     age_check,
     age_error,
@@ -248,9 +249,12 @@ def set_state(
         raise HTTPException(409, "Недопустимый переход статуса")
     if data.state == "open" and comp.deadline < date.today():
         raise HTTPException(422, "Срок подачи заявок уже прошёл")
+    first_publication = comp.state == "draft"
     comp.state = data.state
     comp.revision += 1
     audit(db, actor, "Изменение статуса соревнования", comp, {"state": data.state})
+    if first_publication:
+        integrations.competition_published(db, comp)
     if data.state == "open":
         notify(
             db,
@@ -491,6 +495,8 @@ def moderate(
         f"Даты соревнования: {comp.start_date:%d.%m.%Y} — {comp.end_date:%d.%m.%Y}",
         f"application-decision:{obj.id}",
     )
+    if data.status == "approved":
+        integrations.application_approved(db, obj, comp)
     return row(obj)
 
 
@@ -568,7 +574,10 @@ def publish(
     actor: Actor = Depends(allow("admin")),
     db: Session = Depends(get_db),
 ):
-    comp = locked(db, comp_id)
+    return publish_results(db, actor, locked(db, comp_id), data)
+
+
+def publish_results(db, actor, comp, data):
     if comp.state != "closed":
         raise HTTPException(409, "Закройте приём заявок перед публикацией")
     if comp.end_date > date.today():
@@ -587,7 +596,7 @@ def publish(
         [CompetitionResult(competition_id=comp.id, **r.model_dump()) for r in entries]
     )
     comp.state = "published"
-    add_version(db, comp, actor.user.id)
+    version = add_version(db, comp, actor.user.id)
     audit(
         db,
         actor,
@@ -604,6 +613,7 @@ def publish(
             comp.title,
             f"protocol:{comp.id}:{athlete_id}",
         )
+    integrations.protocol_published(db, comp, version)
     return {"state": comp.state, "count": len(entries), "version": 1}
 
 
@@ -638,6 +648,7 @@ def apply_correction(db, actor, comp, data, reason):
         for k in fields:
             setattr(current[r.athlete_id], k, getattr(r, k))
     version = add_version(db, comp, actor.user.id, reason)
+    integrations.protocol_published(db, comp, version)
     warnings = rank_warnings(db, [current[r.athlete_id].id for r in changed])
     audit(
         db,

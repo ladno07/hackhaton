@@ -34,6 +34,7 @@ import {
   Award,
   Scale,
   Dumbbell,
+  Plug,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { api, errorText, roleNames, sexNames, plain } from "./lib";
@@ -55,6 +56,7 @@ import { Registry, Ranks, Ratings, Reports, Settings } from "./management";
 import { GovernorAwards } from "./awards";
 import { Appeals } from "./appeals";
 import { Standards } from "./standards";
+import { Integrations } from "./integrations";
 
 import {
   AthleteProfileView,
@@ -393,6 +395,7 @@ const navigation = [
     roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   { to: "/settings", label: "Управление", icon: Settings2, roles: ["admin"] },
+  { to: "/integrations", label: "Интеграции", icon: Plug, roles: ["admin"] },
   {
     to: "/profile",
     label: "Мой профиль",
@@ -679,6 +682,14 @@ export default function App() {
           element={
             <Guard roles={["admin"]}>
               <Settings />
+            </Guard>
+          }
+        />
+        <Route
+          path="integrations"
+          element={
+            <Guard roles={["admin"]}>
+              <Integrations />
             </Guard>
           }
         />
