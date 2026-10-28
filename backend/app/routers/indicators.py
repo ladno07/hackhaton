@@ -60,11 +60,13 @@ def fill(db, obj, data, actor):
 
 @router.get("/indicators")
 def indicators(
-    start_year: int = Query(date.today().year - 2, ge=1970, le=2100),
-    end_year: int = Query(date.today().year, ge=1970, le=2100),
+    start_year: int | None = Query(None, ge=1970, le=2100),
+    end_year: int | None = Query(None, ge=1970, le=2100),
     actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
+    start_year = start_year or date.today().year - 2
+    end_year = end_year or date.today().year
     period(start_year, end_year)
     return {
         "years": list(range(start_year, end_year + 1)),
@@ -207,11 +209,13 @@ def delete_document(
 @router.get("/exports/indicators.{fmt}")
 def export_indicators(
     fmt: str,
-    start_year: int = Query(date.today().year - 2, ge=1970, le=2100),
-    end_year: int = Query(date.today().year, ge=1970, le=2100),
+    start_year: int | None = Query(None, ge=1970, le=2100),
+    end_year: int | None = Query(None, ge=1970, le=2100),
     actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
+    start_year = start_year or date.today().year - 2
+    end_year = end_year or date.today().year
     period(start_year, end_year)
     rows = []
     for r in registry_indicators(db, start_year, end_year):

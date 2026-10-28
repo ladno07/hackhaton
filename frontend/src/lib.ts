@@ -160,7 +160,16 @@ export const fileSize = (n: number) =>
     ? Math.max(1, Math.round(n / 1024)) + " КБ"
     : (n / 1024 / 1024).toFixed(1).replace(".", ",") + " МБ";
 export async function download(url: string, name: string) {
-  const res = await api.get(url, { responseType: "blob" });
+  const res = await api.get(url, { responseType: "blob" }).catch(async (err) => {
+    // a blob error body hides the server's "detail" from errorText
+    const body = err?.response?.data;
+    if (body instanceof Blob) {
+      try {
+        err.response.data = JSON.parse(await body.text());
+      } catch {}
+    }
+    throw err;
+  });
   const obj = URL.createObjectURL(res.data);
   const a = document.createElement("a");
   a.href = obj;

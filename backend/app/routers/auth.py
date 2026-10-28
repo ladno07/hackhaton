@@ -97,6 +97,8 @@ def login(
     )
     if not user or not valid:
         raise HTTPException(401, "Неверный email или пароль")
+    if not user.roles:
+        raise HTTPException(403, "У учётной записи нет ролей. Обратитесь в федерацию")
     audit(db, Actor(user, user.roles[0].id), "Вход в систему", user)
     session_id = create_session(db, user, request, response)
     return {

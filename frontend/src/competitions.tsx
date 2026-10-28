@@ -1107,7 +1107,9 @@ export function CompetitionDetail() {
                     "applications",
                     role === "admin" || role === "ministry"
                       ? "Заявки участников"
-                      : "Мои заявки",
+                      : role === "judge"
+                        ? "Участники"
+                        : "Мои заявки",
                   ],
                   ["results", "Результаты и протокол"],
                   ["judges", "Судейская коллегия"],
@@ -1349,11 +1351,38 @@ export function CompetitionDetail() {
                     </div>
                   )}
                   {comp.judges.length ? (
-                    <Table heads={["Судья", "Должность"]}>
+                    <Table
+                      heads={
+                        role === "admin" && comp.state !== "published"
+                          ? ["Судья", "Должность", ""]
+                          : ["Судья", "Должность"]
+                      }
+                    >
                       {comp.judges.map((j: any) => (
                         <tr key={j.judge_id}>
                           <td>{plain(j.full_name)}</td>
                           <td>{j.position}</td>
+                          {role === "admin" && comp.state !== "published" && (
+                            <td>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={action.isPending}
+                                onClick={() =>
+                                  window.confirm(
+                                    `Снять ${plain(j.full_name)} с соревнования?`,
+                                  ) &&
+                                  action.mutate({
+                                    method: "delete",
+                                    url: `/competitions/${id}/judges/${j.judge_id}`,
+                                  })
+                                }
+                              >
+                                <X size={14} />
+                                Снять
+                              </Button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </Table>

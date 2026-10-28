@@ -272,13 +272,20 @@ def detail(
     applications = select(CompetitionApplication).where(
         CompetitionApplication.competition_id == comp.id
     )
-    if actor.role != "admin":
-        applications = applications.where(
-            CompetitionApplication.athlete_id.in_(visible_athletes(db, actor))
-        )
     judges = db.scalars(
         select(CompetitionJudge).where(CompetitionJudge.competition_id == comp.id)
     ).all()
+    # a judge of the panel sees the admitted participants, others only their own
+    if actor.role == "judge" and any(
+        db.get(Judge, j.judge_id).user_id == actor.user.id for j in judges
+    ):
+        applications = applications.where(
+            CompetitionApplication.status == "approved"
+        )
+    elif actor.role != "admin":
+        applications = applications.where(
+            CompetitionApplication.athlete_id.in_(visible_athletes(db, actor))
+        )
     view = competition_view(db, comp, actor)
     group_names = {g["id"]: g["name"] for g in view["age_groups"]}
     return {
@@ -520,9 +527,38 @@ def assign_judge(
         [judge.user_id],
         "Назначение на соревнование",
         f"{comp.title}: {data.position}",
-        f"judge:{comp.id}:{judge.id}",
+        f"judge:{comp.id}:{judge.id}:{now().isoformat()}",
     )
     return row(obj)
+
+
+@router.delete("/competitions/{comp_id}/judges/{judge_id}", status_code=204)
+def unassign_judge(
+    comp_id: int,
+    judge_id: int,
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    comp = locked(db, comp_id)
+    if comp.state == "published":
+        raise HTTPException(409, "Протокол уже опубликован")
+    obj = require(db, CompetitionJudge, (comp.id, judge_id))
+    judge = require(db, Judge, judge_id)
+    audit(
+        db,
+        actor,
+        "Снятие судьи с соревнования",
+        comp,
+        {"judge_id": judge_id, "position": obj.position},
+    )
+    db.delete(obj)
+    notify(
+        db,
+        [judge.user_id],
+        "Назначение на соревнование отменено",
+        f"{comp.title}: {obj.position}",
+        f"judge-removed:{comp.id}:{judge.id}:{now().isoformat()}",
+    )
 
 
 @router.post("/competitions/{comp_id}/results")

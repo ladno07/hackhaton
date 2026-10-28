@@ -247,8 +247,8 @@ def attention(
 
 @router.get("/reports/population")
 def population_report(
-    start_year: int = Query(date.today().year - 1, ge=1970, le=2100),
-    end_year: int = Query(date.today().year, ge=1970, le=2100),
+    start_year: int | None = Query(None, ge=1970, le=2100),
+    end_year: int | None = Query(None, ge=1970, le=2100),
     organization_id: int | None = None,
     discipline_id: int | None = None,
     municipality: str = "",
@@ -257,6 +257,8 @@ def population_report(
     actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
+    start_year = start_year or date.today().year - 1
+    end_year = end_year or date.today().year
     if not 1 <= end_year - start_year <= 30:
         raise HTTPException(422, "Укажите период от 2 до 31 года")
     return population(
@@ -274,8 +276,8 @@ def population_report(
 @router.get("/exports/population.{fmt}")
 def export_population(
     fmt: str,
-    start_year: int = Query(date.today().year - 1, ge=1970, le=2100),
-    end_year: int = Query(date.today().year, ge=1970, le=2100),
+    start_year: int | None = Query(None, ge=1970, le=2100),
+    end_year: int | None = Query(None, ge=1970, le=2100),
     organization_id: int | None = None,
     discipline_id: int | None = None,
     municipality: str = "",
@@ -284,6 +286,8 @@ def export_population(
     actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
+    start_year = start_year or date.today().year - 1
+    end_year = end_year or date.today().year
     if not 1 <= end_year - start_year <= 30:
         raise HTTPException(422, "Укажите период от 2 до 31 года")
     data = population(
@@ -632,12 +636,13 @@ def athlete_report(
 @router.get("/exports/team.{fmt}")
 def team_export(
     fmt: str,
-    season: int = date.today().year,
+    season: int | None = None,
     discipline_id: int | None = None,
     order: bool = False,
     actor: Actor = Depends(allow("admin", "ministry")),
     db: Session = Depends(get_db),
 ):
+    season = season or date.today().year
     query = select(TeamMember).where(TeamMember.season == season)
     if discipline_id:
         query = query.where(TeamMember.discipline_id == discipline_id)

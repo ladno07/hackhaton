@@ -236,7 +236,7 @@ def visible_in_role(db, actor, notice):
             return parts[1] in {"custom", "governor"}
         if parts[0] == "tg-reminder":
             return parts[1] in {"report", "governor"}
-        return parts[0] not in {"application-decision", "rank-decision", "judge", "protocol",
+        return parts[0] not in {"application-decision", "rank-decision", "judge", "judge-removed", "protocol",
                                  "appeal-decision", "violation", "violation-cancel", "stage-transfer",
                                  "competition-schedule", "competition-regulation", "link", "link-change"}
     from app.services.common import visible_athletes, own
@@ -356,7 +356,7 @@ def visible_in_role(db, actor, notice):
         return any(follows(app.athlete_id, comp.discipline_id) for app in db.scalars(select(CompetitionApplication).where(
             CompetitionApplication.competition_id == comp.id,
             CompetitionApplication.status == "approved" if kind == "competition-schedule" else CompetitionApplication.status != "rejected")))
-    if kind == "judge":
+    if kind in {"judge", "judge-removed"}:
         return actor.role == "judge" and int(parts[2]) == own(db, Judge, actor).id
     if kind == "rank-decision":
         application = db.get(RankApplication, int(parts[1]))

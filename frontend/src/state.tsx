@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, errorText, refreshSession, endSession } from "./lib";
 const AuthContext = createContext<any>(null);
@@ -79,9 +79,12 @@ export const useAuth = () => useContext(AuthContext);
 const ToastContext = createContext<any>(null);
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<any>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   function toast(text: string, error = false) {
+    // a new message gets its full time: the previous timer must not close it
+    clearTimeout(timer.current);
     setMessage({ text, error });
-    setTimeout(() => setMessage(null), 6000);
+    timer.current = setTimeout(() => setMessage(null), 6000);
   }
   return (
     <ToastContext.Provider value={toast}>

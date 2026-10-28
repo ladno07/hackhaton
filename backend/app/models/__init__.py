@@ -42,7 +42,11 @@ class User(Base):
         DateTime(timezone=True)
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    roles: Mapped[list["Role"]] = relationship(secondary="user_roles", lazy="selectin")
+    # Stable order: the first role is the default cabinet after login, and
+    # admin < athlete < coach < judge < ministry keeps read-only ministry last.
+    roles: Mapped[list["Role"]] = relationship(
+        secondary="user_roles", lazy="selectin", order_by="Role.id"
+    )
 
 
 class Role(Base):
