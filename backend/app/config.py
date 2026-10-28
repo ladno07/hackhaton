@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     public_site_url: str = "http://localhost:8080"
     # Lets webhooks reach localhost and private networks (local demo receivers).
     webhook_allow_private: bool = False
+    # Testing systems for protocols. Codeforces key and secret are needed only
+    # for closed contests and groups; the Yandex Contest OAuth token is used
+    # when none is given in the import dialog.
+    codeforces_api_key: str = ""
+    codeforces_api_secret: str = ""
+    yandex_contest_token: str = ""
     pdf_font: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     # Letterhead of official documents. Requisites are fictitious demo values:
     # set the real ones through the environment.
