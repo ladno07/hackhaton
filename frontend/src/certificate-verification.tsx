@@ -1,11 +1,18 @@
+import { useEffect } from "react";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ShieldCheck, CircleX, TriangleAlert, Code2 } from "lucide-react";
+import { ShieldCheck, CircleX, TriangleAlert } from "lucide-react";
 import { date, plain } from "./lib";
+import { FspLogo } from "./components/logo";
 
 export function CertificateVerification() {
   const { checkToken = "" } = useParams();
+  useEffect(() => {
+    const previous = document.title;
+    document.title = "Проверка справки · ФСП Оренбургской области";
+    return () => { document.title = previous; };
+  }, []);
   const query = useQuery({
     queryKey: ["public-certificate", checkToken],
     queryFn: async () => (await axios.get(`/api/public/certificates/${encodeURIComponent(checkToken)}`)).data,
@@ -19,9 +26,12 @@ export function CertificateVerification() {
   const label = status === "confirmed" ? "Справка подтверждена" : status === "replaced" ? "Редакция заменена" : "Справка недействительна";
   const Icon = status === "confirmed" ? ShieldCheck : status === "replaced" ? TriangleAlert : CircleX;
   return <main className="verification-page">
-    <header className="verification-header"><span className="verification-brand"><Code2 aria-hidden="true" /> ОренКод</span><Link to="/login">Войти в кабинет</Link></header>
+    <header className="verification-header">
+      <Link to="/start" className="brand" aria-label="Федерация спортивного программирования"><FspLogo className="brand-logo" /></Link>
+      <Link className="btn btn-ghost" to="/login">Войти в кабинет</Link>
+    </header>
     <section className="verification-card">
-      <p className="eyebrow">ФСП Оренбургской области</p>
+      <p className="eyebrow">ФСП Оренбургской области · Проверка документа</p>
       <h1>Проверка справки об участии</h1>
       {query.isPending ? <p role="status">Проверяем запись…</p> : query.isError ? <div role="alert">
         <h2>{missing ? "Справка не найдена" : "Не удалось выполнить проверку"}</h2>
