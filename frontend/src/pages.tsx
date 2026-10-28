@@ -780,7 +780,16 @@ export function ProfileEditor({ athlete, onSaved }: any) {
         </p>
         <div className="form-grid">
           {Object.entries(platformNames).map(([k, n]) => (
-            <Field label={n} key={k}>
+            <Field
+              label={n}
+              key={k}
+              hint={
+                (athlete.unconfirmed_platform_logins || []).includes(k) &&
+                (v.platform_logins[k] || "") === (athlete.platform_logins?.[k] || "")
+                  ? "Не подтверждён федерацией: подтвердят при первом импорте протокола"
+                  : undefined
+              }
+            >
               <input
                 maxLength={100}
                 autoComplete="off"

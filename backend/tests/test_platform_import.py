@@ -90,7 +90,7 @@ def test_profile_logins_are_unique_and_private(env):
 
     other, other_id = login(client, "athlete1")
     res = profile(client, other, other_id, {"codeforces": "tourist"})
-    assert res.status_code == 409 and "уже привязан" in res.text
+    assert res.status_code == 409 and "уже указан" in res.text
     assert profile(client, other, other_id, {"codeforces": "x" * 101}).status_code == 422
 
     ministry = ministry_login(client)
@@ -102,7 +102,7 @@ def test_codeforces_standings_matched_and_published(env, remote):
     client, factory, h, users = env
     answers, calls = remote
     comp, aid, other, other_id = two_participants(client, h, users)
-    ok(profile(client, h["athlete"], aid, {"codeforces": "Petr"}))
+    ok(profile(client, h["admin"], aid, {"codeforces": "Petr"}))
     url = f"/api/competitions/{comp['id']}/results/platform"
     answers[CF] = Response(codeforces([
         (["tourist"], 1, 3000, {}),       # not from the region
@@ -169,7 +169,7 @@ def test_protocol_of_found_participants_only(env, remote):
     client, factory, h, users = env
     answers, _ = remote
     comp, aid, other, other_id = two_participants(client, h, users)
-    ok(profile(client, h["athlete"], aid, {"codeforces": "petr"}))
+    ok(profile(client, h["admin"], aid, {"codeforces": "petr"}))
     url = f"/api/competitions/{comp['id']}/results/platform"
     answers[CF] = Response(codeforces([(["tourist"], 1, 30, {}), (["petr"], 2, 25, {}),
                                        (["ghost"], 3, 20, {})]))
@@ -256,7 +256,7 @@ def test_yandex_contest_pages(env, remote, monkeypatch):
     client, factory, h, users = env
     answers, calls = remote
     comp, aid, _ = finished(client, h, users)
-    ok(profile(client, h["athlete"], aid, {"yandex_contest": "orenburg-coder"}))
+    ok(profile(client, h["admin"], aid, {"yandex_contest": "orenburg-coder"}))
     monkeypatch.setattr(platforms, "YANDEX_PAGE", 2)
     base = f"{platforms.YANDEX_API}/contests/77"
     answers[base] = Response({"name": "Отборочный тур"})
@@ -283,7 +283,7 @@ def test_ctfd_team_competition(env, remote):
     ok(client.post(url + "/submit", headers=h["coach"]))
     ok(client.patch(url + "/review", headers=h["admin"], json={"status": "approved"}))
     ok(client.patch(base + "/state", headers=h["admin"], json={"state": "closed"}))
-    ok(profile(client, people[1][0], people[1][1], {"ctfd": "n0p"}))
+    ok(profile(client, h["admin"], people[1][1], {"ctfd": "n0p"}))
     answers["https://ctf.example.org/api/v1/scoreboard"] = Response({"success": True, "data": [
         {"pos": 1, "name": "MSU", "score": 900, "members": [{"name": "x"}]},
         {"pos": 2, "name": "Команда мечты", "score": 700, "members": [{"name": "n0p"}, {"name": "y"}]},
@@ -312,3 +312,54 @@ def test_codeforces_gym_request_is_signed(env, remote, monkeypatch):
     assert body["ready"] and body["source"]["url"].endswith("/gym/100001/standings")
     params = calls[0][1]
     assert params["apiKey"] == "key" and len(params["apiSig"]) == 6 + 128
+
+
+def test_login_entered_by_athlete_needs_confirmation(env, remote):
+    client, factory, h, users = env
+    answers, _ = remote
+    comp, aid, other, other_id = two_participants(client, h, users)
+    # athlete1 takes the demo athlete's handle before she does
+    assert ok(profile(client, other, other_id, {"codeforces": "Petr"}))[
+        "unconfirmed_platform_logins"] == ["codeforces"]
+    res = profile(client, h["athlete"], aid, {"codeforces": "petr"})
+    assert res.status_code == 409 and "обратитесь в федерацию" in res.text
+
+    url = f"/api/competitions/{comp['id']}/results/platform"
+    answers[CF] = Response(codeforces([(["petr"], 1, 30, {})]))
+    payload = {"platform": "codeforces", "contest": "7"}
+    body = ok(client.post(url, headers=h["admin"], json=payload))
+    assert not body["ready"]
+    assert [(u["login"], u["id"]) for u in body["unconfirmed"]] == [("petr", other_id)]
+    assert "не подтверждён" in body["conflicts"][0]
+    res = client.post(url, headers=h["admin"], json={**payload, "dry_run": False})
+    assert res.status_code == 422
+
+    # the federation binds the login to its real owner
+    body = ok(client.post(url, headers=h["admin"], json={
+        **payload, "bindings": {"petr": aid}, "dry_run": False}))
+    assert body["version"] == 1 and [m["athlete_id"] for m in body["matched"]] == [
+        public_athlete_id(aid)]
+    with factory() as db:
+        logins = db.scalars(select(AthletePlatformLogin)).all()
+        assert [(x.athlete_id, x.login_key, x.confirmed) for x in logins
+                if x.login_key == "petr"] == [(aid, "petr", True)]
+    assert ok(client.get(f"/api/athletes/{other_id}", headers=other))["platform_logins"] == {}
+
+    # a confirmed login cannot be taken over by the federation's binding either
+    answers[CF] = Response(codeforces([(["petr"], 1, 31, {})]))
+    res = client.post(url, headers=h["admin"], json={
+        **payload, "bindings": {"petr": other_id}, "reason": "Перепроверка"})
+    assert res.status_code == 409
+
+
+def test_confirmation_follows_the_login_value(env):
+    client, factory, h, users = env
+    aid = users["athlete"]["athlete_id"]
+    unconfirmed = lambda res: ok(res)["unconfirmed_platform_logins"]
+    assert unconfirmed(profile(client, h["admin"], aid, {"codeforces": "Petr"})) == []
+    # the same value saved by the athlete stays confirmed, a new one does not
+    assert unconfirmed(profile(client, h["athlete"], aid, {"codeforces": "petr"})) == []
+    assert unconfirmed(profile(client, h["athlete"], aid, {"codeforces": "petr2"})) == ["codeforces"]
+    # resaving the form does not confirm it for the federation
+    assert unconfirmed(profile(client, h["admin"], aid, {"codeforces": "petr2"})) == ["codeforces"]
+    assert unconfirmed(profile(client, h["admin"], aid, {"codeforces": "petr3"})) == []

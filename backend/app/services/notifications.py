@@ -147,10 +147,23 @@ def deadlines(db):
         )
 
 
+# A notice the server refuses is retried a few times, then left behind so it
+# cannot hold up the queue. Older unsent notices are not scanned: stale mail is
+# not sent, and notices hidden from every role do not pile up in each pass.
+MAX_MAIL_ATTEMPTS = 5
+MAIL_WINDOW = timedelta(days=7)
+# refusals of this recipient or message; the next notices may still go
+MESSAGE_ERRORS = (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError)
+
+
 def deliver(db):
     pending = db.scalars(
         select(Notification)
-        .where(Notification.mailed_at.is_(None))
+        .where(
+            Notification.mailed_at.is_(None),
+            Notification.attempts < MAX_MAIL_ATTEMPTS,
+            Notification.created_at >= now() - MAIL_WINDOW,
+        )
         .order_by(Notification.id)
     ).yield_per(50)
     attempts = 0
@@ -162,7 +175,6 @@ def deliver(db):
         if attempts >= 50:
             break
         attempts += 1
-        notice.attempts += 1
         try:
             message = EmailMessage()
             message["From"] = settings.mail_from
@@ -178,6 +190,7 @@ def deliver(db):
                 if settings.smtp_user:
                     smtp.login(settings.smtp_user, settings.smtp_password)
                 smtp.send_message(message)
+            notice.attempts += 1
             notice.mailed_at = now()
             notice.last_error = None
         except Exception as exc:
@@ -185,7 +198,11 @@ def deliver(db):
             logger.warning(
                 "Notification %s delivery failed: %s", notice.id, type(exc).__name__
             )
-            break
+            # SMTP errors are OSError: the server is unreachable or refuses
+            # everyone, so the notice keeps its attempts and the pass stops
+            if isinstance(exc, OSError) and not isinstance(exc, MESSAGE_ERRORS):
+                break
+            notice.attempts += 1
     db.commit()
 
 
@@ -263,28 +280,19 @@ def visible_in_role(db, actor, notice):
         if actor.role not in (notice.telegram_context or {}).get("roles", []):
             return False
         family, entity_id = parts[1], int(parts[2])
-        if family in {"report", "governor"}:
+        # deadlines() already puts rank expiry and competition end on the site
+        # and in mail ("deadline:rank", "deadline:end"); the bot's copies of
+        # them are for Telegram only
+        if family in {"report", "governor", "rank", "end"}:
             return False
         if family == "category":
             category = db.get(JudgeCategory, entity_id)
             return bool(category and actor.role == "judge" and category.judge_id == own(db, Judge, actor).id)
-        if family == "rank":
-            rank = db.get(SportsRank, entity_id)
-            if not rank:
-                return False
-            from app.services.common import can_athlete
-            try:
-                can_athlete(db, actor, rank.athlete_id, rank.discipline_id)
-                return True
-            except HTTPException:
-                return False
         comp = db.get(Competition, entity_id)
         if not comp:
             return False
         from zoneinfo import ZoneInfo
         if comp.state not in ("open", "closed") or now().astimezone(ZoneInfo(comp.timezone)).date() > comp.end_date:
-            return False
-        if family == "end" and not competition_in_progress(comp):
             return False
         if actor.role == "judge":
             return bool(family == "start" and db.get(CompetitionJudge, (comp.id, own(db, Judge, actor).id)))
@@ -294,9 +302,7 @@ def visible_in_role(db, actor, notice):
             athletes = set(db.scalars(select(AthleteCoach.athlete_id).where(
                 AthleteCoach.coach_id == own(db, Coach, actor).id,
                 AthleteCoach.status == "active", AthleteCoach.discipline_id == comp.discipline_id)))
-        if family in {"start", "end"}:
-            if family == "end" and actor.role != "athlete":
-                return False
+        if family == "start":
             return bool(db.scalar(select(CompetitionApplication.id).where(
                 CompetitionApplication.competition_id == comp.id,
                 CompetitionApplication.athlete_id.in_(athletes), CompetitionApplication.status == "approved")))

@@ -454,7 +454,8 @@ def seed(demo=False):
                 # demo logins for the protocol from a testing system
                 login = f"demo_oren_{i}"
                 db.add(AthletePlatformLogin(
-                    athlete_id=a.id, platform="codeforces", login=login, login_key=login
+                    athlete_id=a.id, platform="codeforces", login=login, login_key=login,
+                    confirmed=True,
                 ))
             for d in {1, i % 6 + 1}:
                 db.add(

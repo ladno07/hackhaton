@@ -45,9 +45,22 @@ def logins(db, athlete_id):
     }
 
 
-def save_login(db, athlete_id, platform, login):
+def unconfirmed_logins(db, athlete_id):
+    return sorted(
+        db.scalars(
+            select(AthletePlatformLogin.platform).where(
+                AthletePlatformLogin.athlete_id == athlete_id,
+                AthletePlatformLogin.confirmed.is_(False),
+            )
+        )
+    )
+
+
+def save_login(db, athlete_id, platform, login, confirmed=False):
     """Sets or, with an empty value, removes the athlete's login; a login
-    belongs to one athlete only."""
+    belongs to one athlete only. confirmed: the federation binds the login,
+    taking it from another athlete who entered it without confirmation. A new
+    value entered by the athlete is unconfirmed; the same one keeps its state."""
     login, key = login.strip(), login_key(login)
     if len(login) > MAX_LOGIN:
         raise HTTPException(422, f"Логин на {PLATFORMS[platform]} длиннее {MAX_LOGIN} символов")
@@ -62,19 +75,31 @@ def save_login(db, athlete_id, platform, login):
             db.delete(current)
         return
     other = db.scalar(
-        select(AthletePlatformLogin.athlete_id).where(
+        select(AthletePlatformLogin).where(
             AthletePlatformLogin.platform == platform,
             AthletePlatformLogin.login_key == key,
+            AthletePlatformLogin.athlete_id != athlete_id,
         )
     )
-    if other and other != athlete_id:
+    if other and confirmed and not other.confirmed:
+        db.delete(other)
+        db.flush()
+    elif other:
         raise HTTPException(
-            409, f"Логин «{login}» на {PLATFORMS[platform]} уже привязан к другому спортсмену"
+            409,
+            f"Логин «{login}» на {PLATFORMS[platform]} уже указан у другого спортсмена. "
+            "Если это ваш логин, обратитесь в федерацию",
         )
     if current:
+        if current.login_key != key:
+            current.confirmed = confirmed
+        current.confirmed = current.confirmed or confirmed
         current.login, current.login_key = login, key
     else:
-        db.add(AthletePlatformLogin(athlete_id=athlete_id, platform=platform, login=login, login_key=key))
+        db.add(AthletePlatformLogin(
+            athlete_id=athlete_id, platform=platform, login=login, login_key=key,
+            confirmed=confirmed,
+        ))
     db.flush()
 
 
@@ -280,6 +305,8 @@ class Match:
     conflicts: list = field(default_factory=list)
     # logins bound by hand that were used: login -> athlete id
     bound: dict = field(default_factory=dict)
+    # used logins the athletes entered themselves: bound by hand to confirm
+    unconfirmed: list = field(default_factory=list)
 
     @property
     def ready(self):
@@ -300,19 +327,24 @@ def match(db, comp, platform, standings, bindings):
             )
         )
     )
-    registry = dict(
-        db.execute(
-            select(AthletePlatformLogin.login_key, AthletePlatformLogin.athlete_id).where(
-                AthletePlatformLogin.platform == platform
-            )
-        ).all()
-    )
+    registry, pending = {}, set()
+    for key, athlete_id, confirmed in db.execute(
+        select(
+            AthletePlatformLogin.login_key,
+            AthletePlatformLogin.athlete_id,
+            AthletePlatformLogin.confirmed,
+        ).where(AthletePlatformLogin.platform == platform)
+    ):
+        registry[key] = athlete_id
+        if not confirmed:
+            pending.add(key)
     hand = {}
     for login, athlete_id in bindings.items():
         key = login_key(login)
         if athlete_id not in approved:
             raise HTTPException(422, f"Логин «{login}» можно привязать только к одобренному участнику")
-        if registry.get(key, athlete_id) != athlete_id:
+        # a login nobody confirmed may be bound to whom it really belongs
+        if registry.get(key, athlete_id) != athlete_id and key not in pending:
             raise HTTPException(
                 409, f"Логин «{login}» уже привязан к спортсмену {public_athlete_id(registry[key])}"
             )
@@ -389,9 +421,17 @@ def match(db, comp, platform, standings, bindings):
     places = recount([r.place for r, _, _ in found])
     for (r, subject, used), place in zip(found, places):
         login = used[0] if used else (r.logins[0] if r.logins else "")
-        for l in used:
+        # a row name may repeat its login (one-member Codeforces party)
+        for l in dict.fromkeys(used):
             if login_key(l) in hand:
                 result.bound[l] = hand[login_key(l)]
+            elif login_key(l) in pending:
+                claim = {"login": l, "id": registry[login_key(l)], **athlete_data(db, registry[login_key(l)])}
+                result.unconfirmed.append(claim)
+                result.conflicts.append(
+                    f"«{l}»: логин указан в профиле спортсмена {claim['full_name']} "
+                    f"({claim['athlete_id']}) и не подтверждён федерацией"
+                )
         if comp.entry_mode == "team":
             result.rows.append(ImportRowIn(team=str(subject), place=place, score=max(r.score, 0)))
             who = {"team_id": subject, "full_name": teams[subject].name}
