@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import engine
 from app.routers import auth, registry, staff, competitions, federation, reports, public, telegram
 from app.routers import appeals, awards, competition_teams, documents, indicators, passports
-from app.routers import integrations, standards
+from app.routers import integrations, standards, training, training_materials
 from app.services.notifications import worker
 
 
@@ -85,6 +85,8 @@ for router in [
     awards.router,
     appeals.router,
     standards.router,
+    training.router,
+    training_materials.router,
     integrations.router,
     integrations.api,
     public.router,

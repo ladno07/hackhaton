@@ -918,7 +918,6 @@ export function Coaching() {
   const [search, setSearch] = useSearchParams();
   const chatId = Number(search.get("chat"));
   const q = useData("/links");
-  const athletes = useData("/athletes", role === "coach");
   const meta = useData("/metadata");
   const [show, setShow] = useState(false);
   const [athlete, setAthlete] = useState("");
@@ -1067,26 +1066,25 @@ export function Coaching() {
             try {
               await action.mutateAsync({
                 url: "/links",
-                data: { athlete_id: +athlete, discipline_id: +discipline },
+                data: { athlete_public_id: athlete.trim().toUpperCase(), discipline_id: +discipline },
               });
               setShow(false);
+              setAthlete("");
             } catch {}
           }}
         >
-          <Field label="Спортсмен">
-            <select
+          <Field label="FSP ID спортсмена">
+            <input
               required
+              placeholder="FSP-000123"
+              maxLength={32}
+              autoCapitalize="characters"
+              autoComplete="off"
               value={athlete}
               onChange={(e) => setAthlete(e.target.value)}
-            >
-              <option value="">Выберите спортсмена</option>
-              {athletes.data?.map((a: any) => (
-                <option key={a.id} value={a.id}>
-                  {plain(a.full_name)} · {a.municipality}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
+          <p className="muted">Попросите спортсмена скопировать FSP ID из своего личного кабинета.</p>
           <Field label="Дисциплина">
             <select
               value={discipline}
@@ -1132,6 +1130,7 @@ export function Notifications() {
                 <div>
                   <h3>{plain(n.title)}</h3>
                   <p>{n.body}</p>
+                  {n.event_key.startsWith("training-") && <Link className="text-link" to={n.telegram_context?.path?.startsWith("/training?group=") ? n.telegram_context.path : "/training"}>Открыть группу и расписание</Link>}
                   {n.event_key.startsWith("competition-team:") && (
                     <Link
                       className="text-link"

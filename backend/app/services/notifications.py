@@ -71,6 +71,8 @@ def athlete_audience(db, athlete_id, discipline_id=None):
 
 
 def deadlines(db):
+    from app.services.training_schedule import reminders
+    reminders(db)
     today = date.today()
     for comp in db.scalars(
         select(Competition).where(
@@ -214,6 +216,9 @@ MINISTRY_EVENTS = {"competition-open", "competition-regulation"}
 def visible_in_role(db, actor, notice):
     """Account ownership is checked by the router; this additionally scopes role-specific events."""
     parts = notice.event_key.split(":")
+    if notice.event_key.startswith("training-"):
+        from app.services.training_schedule import visible_training_notice
+        return visible_training_notice(db, actor, notice)
     if parts[0] == "coach-chat":
         message = db.get(CoachChatMessage, int(parts[1]))
         link = db.get(AthleteCoach, message.link_id) if message else None

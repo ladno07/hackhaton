@@ -18,7 +18,7 @@ from app.services.common import *
 from app.services.notifications import notify, link_change_content
 from app.services.path import personal_path
 from app.services.ratings import rating_levels
-from app.services.athlete_ids import public_athlete_id
+from app.services.athlete_ids import public_athlete_id, parse_athlete_id
 
 router = APIRouter(tags=["Реестры и профили"])
 MINISTRY_FIELDS = [
@@ -253,6 +253,11 @@ def edit_organization(
     db: Session = Depends(get_db),
 ):
     obj = require(db, Organization, org_id)
+    used_programs = set(db.scalars(select(TrainingGroup.program).where(
+        TrainingGroup.organization_id == org_id, TrainingGroup.archived == False,
+    )))
+    if not used_programs.issubset(set(data.programs)):
+        raise HTTPException(409, "Нельзя убрать программу действующей группы")
     for k, v in data.model_dump().items():
         setattr(obj, k, v)
     audit(db, actor, "Изменение организации", obj)
@@ -295,7 +300,14 @@ def request_link(
     data: LinkIn, actor: Actor = Depends(allow("coach")), db: Session = Depends(get_db)
 ):
     coach = active_card(db, Coach, actor)
-    athlete = require(db, Athlete, data.athlete_id)
+    athlete_id = (
+        parse_athlete_id(data.athlete_public_id)
+        if data.athlete_public_id is not None
+        else data.athlete_id
+    )
+    athlete = db.get(Athlete, athlete_id)
+    if athlete is None:
+        raise HTTPException(404, "Спортсмен с таким ID не найден")
     require(db, Discipline, data.discipline_id)
     if not db.get(AthleteDiscipline, (athlete.id, data.discipline_id)):
         raise HTTPException(422, "Спортсмен не занимается выбранной дисциплиной")

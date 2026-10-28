@@ -57,6 +57,7 @@ import { GovernorAwards } from "./awards";
 import { Appeals } from "./appeals";
 import { Standards } from "./standards";
 import { Integrations } from "./integrations";
+import { Training } from "./training";
 
 import {
   AthleteProfileView,
@@ -76,7 +77,7 @@ function Login() {
   const returnTo =
     new URLSearchParams(loginLocation.search).get("returnTo") || "/";
   const safeReturn =
-    /^\/(?:competitions(?:\/[0-9]+)?|certificates\/[0-9]+(?:\?version=[0-9]+)?|athletes\/[0-9]+\/profile)$/.test(
+    /^\/(?:competitions(?:\/[0-9]+)?|certificates\/[0-9]+(?:\?version=[0-9]+)?|athletes\/[0-9]+\/profile|training(?:\?group=[1-9][0-9]*)?)$/.test(
       returnTo,
     )
       ? returnTo
@@ -321,6 +322,7 @@ const navigation = [
     roles: ["admin", "athlete", "coach", "judge", "ministry"],
   },
   { to: "/registry", label: "Реестр", icon: Users, roles: ["admin", "coach", "ministry"] },
+  { to: "/training", label: "Группы и занятия", icon: ClipboardList, roles: ["admin", "coach", "athlete", "ministry"] },
   {
     to: "/coaching",
     label: "Связи с тренерами",
@@ -661,6 +663,7 @@ export default function App() {
         <Route path="ratings" element={<Ratings />} />
         <Route path="appeals" element={<Appeals />} />
         <Route path="standards" element={<Standards />} />
+        <Route path="training" element={<Training />} />
         <Route
           path="awards"
           element={

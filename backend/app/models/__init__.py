@@ -67,6 +67,96 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(200), unique=True)
     kind: Mapped[str] = mapped_column(String(80), default="Клуб")
     municipality: Mapped[str] = mapped_column(String(120))
+    license_number: Mapped[str | None] = mapped_column(String(160))
+    license_valid_until: Mapped[date | None] = mapped_column(Date)
+    programs: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class TrainingGroup(Base):
+    __tablename__ = "training_groups"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name"),
+        CheckConstraint("stage IN ('np','ut','ssm','vsm')"),
+        CheckConstraint("capacity > 0"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id"))
+    coach_id: Mapped[int] = mapped_column(ForeignKey("coaches.id"))
+    name: Mapped[str] = mapped_column(String(160))
+    stage: Mapped[str] = mapped_column(String(10))
+    program: Mapped[str] = mapped_column(String(300))
+    capacity: Mapped[int] = mapped_column(Integer, default=20)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class GroupEnrollment(Base):
+    __tablename__ = "group_enrollments"
+    __table_args__ = (CheckConstraint("end_date IS NULL OR end_date >= start_date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("training_groups.id"), index=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    order_number: Mapped[str] = mapped_column(String(120))
+    end_order_number: Mapped[str | None] = mapped_column(String(120))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class TrainingLesson(Base):
+    __tablename__ = "training_lessons"
+    __table_args__ = (CheckConstraint("duration_minutes > 0"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("training_groups.id"), index=True)
+    held_on: Mapped[date] = mapped_column(Date)
+    topic: Mapped[str] = mapped_column(String(500))
+    duration_minutes: Mapped[int] = mapped_column(Integer)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    start_time: Mapped[time | None] = mapped_column(Time)
+    timezone: Mapped[str] = mapped_column(String(80), default="Asia/Yekaterinburg")
+    format: Mapped[str] = mapped_column(String(20), default="onsite")
+    location: Mapped[str] = mapped_column(String(500), default="")
+    meeting_url: Mapped[str | None] = mapped_column(String(2000))
+    instructions: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="completed")
+    cancellation_reason: Mapped[str | None] = mapped_column(String(1000))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    due_on: Mapped[date | None] = mapped_column(Date)
+
+
+class TrainingMaterial(Base):
+    __tablename__ = "training_materials"
+    __table_args__ = (
+        CheckConstraint("kind IN ('file','link')"),
+        CheckConstraint("(kind = 'file' AND data IS NOT NULL AND url IS NULL AND filename IS NOT NULL AND size > 0) OR (kind = 'link' AND url IS NOT NULL AND data IS NULL AND filename IS NULL)"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("training_lessons.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))
+    title: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(String(2000))
+    filename: Mapped[str | None] = mapped_column(String(255))
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    size: Mapped[int | None] = mapped_column(Integer)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LessonAttendance(Base):
+    __tablename__ = "lesson_attendance"
+    __table_args__ = (
+        UniqueConstraint("lesson_id", "athlete_id"),
+        CheckConstraint("status IN ('unmarked','present','absent')"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("training_lessons.id"), index=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="unmarked")
+    marked_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dispute_reason: Mapped[str | None] = mapped_column(String(1000))
 
 
 class Discipline(Base):

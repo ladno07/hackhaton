@@ -104,6 +104,12 @@ def transfer(db, athlete, organization_id, on=None):
     if (current.organization_id if current else None) == organization_id:
         athlete.organization_id = organization_id
         return
+    if db.scalar(select(GroupEnrollment.id).join(TrainingGroup).where(
+        GroupEnrollment.athlete_id == athlete.id,
+        (GroupEnrollment.end_date.is_(None) | (GroupEnrollment.end_date >= on)),
+        TrainingGroup.organization_id != organization_id if organization_id is not None else True,
+    ).limit(1)):
+        raise HTTPException(409, "Сначала завершите зачисления в группы прежней организации")
     # Only the open period may be cut; closed ones must end before the transfer.
     if any(
         p.start_date > on or p is not current and p.end_date >= on for p in periods

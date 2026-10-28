@@ -1,0 +1,277 @@
+.training-page {
+  min-width: 0;
+}
+
+#training-group-detail { scroll-margin-top: 24px; }
+
+.training-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 22px 24px;
+  background: var(--fsp-primary-50);
+  border: 1px solid var(--fsp-primary-100);
+  border-radius: var(--radius-md);
+}
+
+.training-guide > div { display: flex; align-items: flex-start; gap: 12px; }
+.training-guide > div > span {
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 50%; flex-shrink: 0; background: white;
+  color: var(--fsp-primary-700); font-size: 12px; font-weight: 700;
+}
+.training-guide p { font-size: 12px; line-height: 1.8; color: var(--fsp-neutral-700); }
+
+.training-agenda-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+  gap: 20px;
+  padding: 0 24px 24px;
+}
+.training-agenda-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+  padding: 22px; border: 1px solid var(--fsp-neutral-100);
+  border-radius: var(--radius-md); min-width: 0;
+}
+.training-agenda-card h3 { font-size: 16px; font-weight: 650; line-height: 1.6; overflow-wrap: anywhere; }
+.training-agenda-card p { line-height: 1.8; overflow-wrap: anywhere; }
+.training-when { color: var(--fsp-primary-700); font-weight: 600; font-size: 13px; }
+.training-muted { color: var(--fsp-neutral-600); font-size: 12px; }
+.training-phase { font-size: 11px; line-height: 1.6; padding: 5px 10px; border-radius: var(--radius-pill); background: var(--fsp-neutral-50); color: var(--fsp-neutral-600); }
+.training-phase-in_progress { background: var(--fsp-success-50); color: var(--fsp-success-700); }
+.training-phase-awaiting_completion { background: var(--fsp-warning-50); color: var(--fsp-warning-700); }
+.training-lesson-place { display: grid; gap: 14px; width: 100%; font-size: 13px; line-height: 1.8; }
+.training-lesson-place .btn { justify-self: start; }
+.training-instructions { padding: 14px 16px; border-radius: var(--radius-sm); background: var(--fsp-neutral-50); }
+.training-instructions strong { font-size: 12px; }
+.training-instructions p { margin-top: 7px; white-space: pre-wrap; }
+.training-cancelled, .training-dispute { color: var(--fsp-danger-700); font-size: 12px; }
+.training-dispute { margin-top: 10px; max-width: 340px; white-space: pre-wrap; }
+.training-cancelled-list { margin: 0 24px 24px; font-size: 12px; line-height: 1.8; }
+.training-cancelled-list summary { padding: 12px 0; cursor: pointer; color: var(--fsp-neutral-600); }
+.training-cancelled-list > div { padding: 14px 0; border-top: 1px solid var(--fsp-neutral-100); }
+.training-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.training-materials { width: 100%; min-width: 0; }
+.training-materials h4 { font-size: 13px; font-weight: 650; margin-bottom: 12px; }
+.training-material-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--fsp-neutral-100); }
+.training-material-row > svg { color: var(--fsp-primary-600); align-self: start; margin-top: 3px; }
+.training-material-copy { min-width: 0; }
+.training-material-copy strong { display: block; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.training-material-copy small { display: block; color: var(--fsp-neutral-500); font-size: 11px; line-height: 1.7; margin-top: 4px; overflow-wrap: anywhere; }
+.training-material-manager { display: grid; gap: 22px; }
+.training-material-form { padding-top: 22px; border-top: 1px solid var(--fsp-neutral-100); }
+.training-material-form h3 { font-size: 15px; font-weight: 600; }
+.training-material-removed summary { font-size: 12px; cursor: pointer; padding: 12px 0; color: var(--fsp-neutral-600); }
+.training-completed-materials { padding: 0 24px 22px; }
+.training-materials-action { padding: 0 24px 20px; }
+.training-phase-self_study { background: var(--fsp-primary-50); color: var(--fsp-primary-700); }
+.training-phase-deadline_passed { background: var(--fsp-warning-50); color: var(--fsp-warning-700); }
+
+.training-search {
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--fsp-neutral-100);
+}
+
+.training-search .field {
+  max-width: 540px;
+  margin: 0;
+}
+
+.training-group-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 26px 24px 22px;
+}
+
+.training-group-heading > div,
+.training-lesson-heading > div {
+  min-width: 0;
+}
+
+.training-eyebrow {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--fsp-neutral-500);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.training-group-heading h2 {
+  font-size: 20px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.training-group-heading p {
+  margin-top: 8px;
+  color: var(--fsp-neutral-600);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.training-stage,
+.training-duration {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--fsp-primary-50);
+  color: var(--fsp-primary-700);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.training-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 0.7fr);
+  gap: 24px;
+  margin: 0 24px;
+  padding: 20px 0;
+  border-top: 1px solid var(--fsp-neutral-100);
+  border-bottom: 1px solid var(--fsp-neutral-100);
+}
+
+.training-summary dt {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fsp-neutral-500);
+}
+
+.training-summary dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.training-summary dd span {
+  color: var(--fsp-neutral-600);
+  font-weight: 400;
+}
+
+.training-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+}
+
+.training-actions .export-buttons {
+  margin-left: auto;
+}
+
+.training-section-heading {
+  padding: 20px 24px;
+  border-top: 1px solid var(--fsp-neutral-100);
+}
+
+.training-section-heading h3,
+.training-lesson-heading h3 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.training-section-heading p {
+  margin-top: 6px;
+  color: var(--fsp-neutral-500);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.training-journal .panel-heading,
+.training-dynamics .panel-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.training-journal-note {
+  margin: 0 24px 24px;
+}
+
+.training-lesson {
+  border-top: 1px solid var(--fsp-neutral-100);
+}
+
+.training-lesson-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 22px 24px;
+}
+
+.training-lesson-heading p {
+  margin-bottom: 6px;
+  color: var(--fsp-neutral-500);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-lesson-heading h3 {
+  overflow-wrap: anywhere;
+}
+
+.training-duration {
+  background: var(--fsp-neutral-50);
+  color: var(--fsp-neutral-600);
+  font-weight: 500;
+}
+
+.training-page td,
+.training-dynamics td {
+  line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .training-material-row { grid-template-columns: 18px minmax(0, 1fr); }
+  .training-material-row > .row-actions { grid-column: 2; }
+  .training-completed-materials { padding: 0 18px 20px; }
+  .training-materials-action { padding: 0 18px 20px; }
+  .training-guide { grid-template-columns: 1fr; gap: 16px; padding: 20px 18px; }
+  .training-agenda-grid { padding: 0 18px 20px; }
+  .training-agenda-card { padding: 18px; }
+  .training-form-grid { grid-template-columns: 1fr; }
+  .training-cancelled-list { margin: 0 18px 20px; }
+  .training-search,
+  .training-group-heading,
+  .training-actions,
+  .training-section-heading,
+  .training-lesson-heading {
+    padding: 20px 18px;
+  }
+
+  .training-group-heading h2 {
+    font-size: 18px;
+  }
+
+  .training-summary {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin: 0 18px;
+  }
+
+  .training-actions .export-buttons {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .training-journal-note {
+    margin: 0 18px 20px;
+  }
+
+  .training-lesson-heading {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}

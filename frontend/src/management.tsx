@@ -62,7 +62,8 @@ import { Indicators } from "./indicators";
 
 export function Registry() {
   const { role } = useAuth();
-  const [tab, setTab] = useState("athletes");
+  const [registrySearch] = useSearchParams();
+  const [tab, setTab] = useState(registrySearch.get("tab") === "organizations" ? "organizations" : "athletes");
   const [search, setSearch] = useState("");
   const [disc, setDisc] = useState("");
   const [org, setOrg] = useState("");
@@ -421,7 +422,7 @@ export function Registry() {
         )}
         {tab === "organizations" && (
           <State query={meta}>
-            <Table heads={["Организация", "Тип", "Муниципалитет", ""]}>
+            <Table heads={["Организация", "Тип", "Муниципалитет", "Лицензия и программы", ""]}>
               {meta.data?.organizations
                 .filter((o: any) =>
                   o.name.toLowerCase().includes(search.toLowerCase()),
@@ -433,6 +434,7 @@ export function Registry() {
                     </td>
                     <td>{o.kind}</td>
                     <td>{o.municipality}</td>
+                    <td>{o.license_number || "Лицензия не указана"}{o.license_valid_until && <small>До {date(o.license_valid_until)}</small>}<small>{o.programs?.join("; ") || "Программы не указаны"}</small></td>
                     <td>
                       {role === "admin" && (
                         <Button
@@ -502,6 +504,9 @@ export function Registry() {
             onSubmit={async (e) => {
               e.preventDefault();
               const { id, ...data } = orgEdit;
+              data.programs = typeof data.programs === "string" ? data.programs.split("\n").map((p: string) => p.trim()).filter(Boolean) : data.programs || [];
+              data.license_number = data.license_number || null;
+              data.license_valid_until = data.license_valid_until || null;
               try {
                 await action.mutateAsync({
                   method: id ? "put" : "post",
@@ -527,6 +532,9 @@ export function Registry() {
                 />
               </Field>
             ))}
+            <Field label="Номер лицензии (если есть)"><input maxLength={160} value={orgEdit.license_number || ""} onChange={e => setOrgEdit({ ...orgEdit, license_number: e.target.value })} /></Field>
+            <Field label="Срок действия лицензии"><input type="date" value={orgEdit.license_valid_until || ""} onChange={e => setOrgEdit({ ...orgEdit, license_valid_until: e.target.value })} /></Field>
+            <Field label="Программы подготовки" hint="Каждая программа с новой строки."><textarea value={Array.isArray(orgEdit.programs) ? orgEdit.programs.join("\n") : orgEdit.programs || ""} maxLength={9000} rows={4} onChange={e => setOrgEdit({ ...orgEdit, programs: e.target.value })} /></Field>
             <Button disabled={action.isPending}>Сохранить</Button>
           </form>
         )}
@@ -1277,6 +1285,17 @@ export function Reports() {
           ) : (
             <Empty text="Нет данных за выбранный период" />
           )}
+        </State>
+      </section>
+      <section className="panel section-gap training-dynamics">
+        <div className="panel-heading"><div><h2>Динамика групп и посещаемости</h2><p>Зачисления, проведённые занятия и подтверждённые часы.</p></div>
+          <ExportButtons base={"/exports/training-dynamics?" + params} name="training-dynamics" />
+        </div>
+        <State query={q}>
+          <p className="inline-note">{q.data?.training?.source}</p>
+          {q.data?.training?.rows.length ? <Table heads={q.data.training.headers}>
+            {q.data.training.rows.map((r: any[], i: number) => <tr key={i}>{r.map((c: any, j: number) => <td key={j}>{c}</td>)}</tr>)}
+          </Table> : <Empty text="Нет данных по группам за выбранный период" />}
         </State>
       </section>
       <Indicators start={start} end={end} />

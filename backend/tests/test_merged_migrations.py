@@ -35,6 +35,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     # Reconstruct their completed 0006 schema to test the merged branches on SQLite.
     previous = MetaData()
     added = {
+        "training_groups", "group_enrollments", "training_lessons", "lesson_attendance", "training_materials",
         "coach_chat_messages",
         "violations",
         "appeals",
@@ -72,6 +73,8 @@ def test_merged_migration_upgrade(tmp_path, source):
         comp._columns.remove(comp.c[name])
     previous.tables["notifications"]._columns.remove(previous.tables["notifications"].c.telegram_context)
     previous.tables["competition_applications"]._columns.remove(previous.tables["competition_applications"].c.approved_at)
+    for name in ("license_number", "license_valid_until", "programs"):
+        previous.tables["organizations"]._columns.remove(previous.tables["organizations"].c[name])
     engine = create_engine(url)
     previous.create_all(engine)
     with engine.begin() as conn:
@@ -134,7 +137,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalars().all() == ["0019"]
+        ).scalars().all() == ["0022"]
         tables = set(inspect(conn).get_table_names())
         assert {
             "athlete_organizations",

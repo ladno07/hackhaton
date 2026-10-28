@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import select
 from app.models import *
 from app.services.common import age_at
+from app.services.training_reports import training_dynamics
 
 
 def population(
@@ -75,6 +76,8 @@ def population(
         unique = set().union(*(ids for key, ids in counts.items() if key[0] == year))
         totals.append({"year": year, "count": len(unique)})
     return {
+        "training": training_dynamics(db, start_year, end_year, organization_id,
+                                      discipline_id, municipality, min_age, max_age),
         "totals": totals,
         "rows": rows,
         "headers": [

@@ -180,8 +180,15 @@ class JudgeIn(Strict):
 
 
 class LinkIn(Strict):
-    athlete_id: int
+    athlete_id: int | None = Field(None, gt=0)
+    athlete_public_id: str | None = Field(None, max_length=32)
     discipline_id: int
+
+    @model_validator(mode="after")
+    def athlete_identifier(self):
+        if (self.athlete_id is None) == (self.athlete_public_id is None):
+            raise ValueError("Укажите один ID спортсмена")
+        return self
 
 
 class LinkState(Strict):
@@ -296,6 +303,18 @@ class OrganizationIn(Strict):
     name: str = Field(min_length=2, max_length=200)
     kind: str = Field(min_length=2, max_length=80)
     municipality: str = Field(min_length=2, max_length=120)
+    license_number: str | None = Field(None, max_length=160)
+    license_valid_until: date | None = None
+    programs: list[str] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="after")
+    def program_names(self):
+        self.programs = list(dict.fromkeys(p.strip() for p in self.programs))
+        if any(not p or len(p) > 300 for p in self.programs):
+            raise ValueError("Название программы: от 1 до 300 символов")
+        if self.license_valid_until and not self.license_number:
+            raise ValueError("Укажите номер лицензии")
+        return self
 
 
 class NameIn(Strict):

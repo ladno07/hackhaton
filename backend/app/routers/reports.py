@@ -327,6 +327,32 @@ def export_population(
     )
 
 
+@router.get("/exports/training-dynamics.{fmt}")
+def export_training_dynamics(
+    fmt: str,
+    start_year: int | None = Query(None, ge=1970, le=2100),
+    end_year: int | None = Query(None, ge=1970, le=2100),
+    organization_id: int | None = None,
+    discipline_id: int | None = None,
+    municipality: str = "",
+    min_age: int = 0,
+    max_age: int = 100,
+    actor: Actor = Depends(allow("admin", "ministry")),
+    db: Session = Depends(get_db),
+):
+    from app.services.training_reports import training_dynamics
+    start_year, end_year = start_year or date.today().year - 1, end_year or date.today().year
+    if not 1 <= end_year - start_year <= 30:
+        raise HTTPException(422, "Укажите период от 2 до 31 года")
+    data = training_dynamics(db, start_year, end_year, organization_id, discipline_id, municipality, min_age, max_age)
+    return download(OfficialDocument(
+        kind="Отчёт", title="о динамике учебных групп и посещаемости", dated=date.today(),
+        headers=data["headers"], rows=data["rows"],
+        meta=[("Период", f"{start_year}–{end_year}")],
+        outro=[data["source"]], signatures=[HEAD, ("Исполнитель", actor.user.full_name)],
+    ), fmt, "training-dynamics")
+
+
 @router.get("/exports/protocol/{comp_id}.{fmt}")
 def protocol(
     comp_id: int,
