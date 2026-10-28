@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAction, useData } from "./state";
-import { date, sexNames } from "./lib";
+import { date, sexNames, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
 
@@ -140,7 +140,7 @@ export function StaffEditor({ kind, card, onSaved, disabled }: any) {
             <option value="">Без организации</option>
             {meta.data?.organizations.map((o: any) => (
               <option key={o.id} value={o.id}>
-                {o.name}
+                {plain(o.name)}
               </option>
             ))}
           </select>
@@ -254,7 +254,7 @@ export function ArchiveForm({ kind, card, onDone }: any) {
       }}
     >
       <p className="inline-note">
-        {card.full_name} пропадёт из реестра и списков выбора. История связей,
+        {plain(card.full_name)} пропадёт из реестра и списков выбора. История связей,
         назначений и протоколов сохранится.
         {kind === "coach"
           ? " Активные связи со спортсменами будут приостановлены, неподтверждённые запросы — завершены."

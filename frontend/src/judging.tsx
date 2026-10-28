@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useData } from "./state";
-import { date, statuses } from "./lib";
+import { date, statuses, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import {
   Badge,
@@ -29,7 +29,7 @@ export function Assignments() {
       <State query={q}>
         {q.data?.length ? <Table heads={["Соревнование", "Даты", "Дисциплина", "Место проведения", "Должность", "Статус"]}>
           {q.data.map((j: any) => <tr key={j.competition_id}>
-            <td><Link to={"/competitions/" + j.competition_id}><strong>{j.title}</strong></Link></td>
+            <td><Link to={"/competitions/" + j.competition_id}><strong>{plain(j.title)}</strong></Link></td>
             <td>{dates(j)}</td><td>{j.discipline}</td><td>{j.location}</td><td>{j.position}</td>
             <td><Badge value={j.state} /></td>
           </tr>)}
@@ -67,10 +67,10 @@ export function JudgingHistory() {
           <Stat label="Дисциплины" value={data.stats.disciplines} note="За выбранный период" />
         </div>
         <section className="panel section-gap">
-          <div className="panel-heading"><h2>Отчёт · {data.judge.full_name}</h2></div>
+          <div className="panel-heading"><h2>Отчёт · {plain(data.judge.full_name)}</h2></div>
           {data.items.length ? <Table heads={["Соревнование", "Даты", "Дисциплина", "Статус", "Должность", "Участников", "Протокол", "Документы"]}>
             {data.items.map((i: any) => <tr key={i.competition_id}>
-              <td><Link to={"/competitions/" + i.competition_id}><strong>{i.title}</strong></Link><br /><small>{i.location}</small></td>
+              <td><Link to={"/competitions/" + i.competition_id}><strong>{plain(i.title)}</strong></Link><br /><small>{i.location}</small></td>
               <td>{dates(i)}</td><td>{i.discipline}</td><td>{statuses[i.status] || i.status}</td>
               <td>{i.position}</td><td>{i.participants}</td><td><Badge value={i.state} /></td>
               <td className="judging-doc-links">

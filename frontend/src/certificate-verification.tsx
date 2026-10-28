@@ -2,7 +2,7 @@ import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ShieldCheck, CircleX, TriangleAlert, Code2 } from "lucide-react";
-import { date } from "./lib";
+import { date, plain } from "./lib";
 
 export function CertificateVerification() {
   const { checkToken = "" } = useParams();
@@ -31,7 +31,7 @@ export function CertificateVerification() {
         <div className={`verification-status ${status}`} role="status"><Icon aria-hidden="true" /><strong>{label}</strong></div>
         <dl className="verification-details">
           <div><dt>Номер справки</dt><dd>{data.certificate_number}</dd></div>
-          {data.competition_title && <div><dt>Соревнование</dt><dd>{data.competition_title}</dd></div>}
+          {data.competition_title && <div><dt>Соревнование</dt><dd>{plain(data.competition_title)}</dd></div>}
           <div><dt>Редакция протокола</dt><dd>{data.version}</dd></div>
           {data.published_at && <div><dt>Дата публикации</dt><dd>{date(data.published_at)}</dd></div>}
         </dl>

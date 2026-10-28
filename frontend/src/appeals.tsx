@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Scale, ShieldAlert } from "lucide-react";
 import { useAction, useAuth, useData } from "./state";
-import { date, today } from "./lib";
+import { date, today, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -28,7 +28,6 @@ const violationKinds: Record<string, string> = {
   doping: "Нарушение антидопинговых правил",
   other: "Иное нарушение",
 };
-const plain = (s: string) => s?.replace("Демо · ", "");
 
 function AppealForm({ onDone }: any) {
   const options = useData("/appeals/options");

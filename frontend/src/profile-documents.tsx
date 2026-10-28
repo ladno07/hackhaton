@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useData, useToast } from "./state";
-import { date, download, errorText, stateNames, today } from "./lib";
+import { date, download, errorText, stateNames, today, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { State } from "./components/shared";
@@ -32,7 +32,7 @@ export function ProfileDocuments({ user }: any) {
       <State query={q}>
         {q.data?.length ? q.data.map((doc: any) => (
           <div className="form-section" key={doc.id}>
-            <h3>{doc.title}</h3>
+            <h3>{plain(doc.title)}</h3>
             <p>Принято {date(doc.accepted_at)} · версия {doc.version}</p>
             <div className="export-buttons">
               <Button size="sm" variant="outline" onClick={() => setSelected(doc)}>Просмотреть</Button>

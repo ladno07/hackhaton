@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Award, Banknote, CheckCircle2, FileText, Users } from "lucide-react";
 import { useAction, useAuth, useData } from "./state";
-import { date, levels } from "./lib";
+import { date, levels, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -81,7 +81,7 @@ function StatusDialog({ year, item, kind, onDone }: any) {
       }}
     >
       <p className="award-dialog-name">
-        <strong>{item.full_name}</strong>
+        <strong>{plain(item.full_name)}</strong>
         {rubles(item.amount)}
       </p>
       <Field label={d.label}>
@@ -178,7 +178,7 @@ function Achievement({ a, more }: any) {
   return (
     <>
       <strong>
-        {a.place} место · {a.title}
+        {a.place} место · {plain(a.title)}
       </strong>
       <small>
         {levels[a.level]} · {date(a.date)}
@@ -366,7 +366,7 @@ export function GovernorAwards() {
               {items.map((i: any) => (
                 <tr key={i.athlete_id}>
                   <td>
-                    <strong>{i.full_name}</strong>
+                    <strong>{plain(i.full_name)}</strong>
                     <small>{i.organization || i.municipality}</small>
                   </td>
                   <td>

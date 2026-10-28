@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAction, useAuth, useData, useToast } from "./state";
-import { date, download, errorText, fileSize } from "./lib";
+import { date, download, errorText, fileSize, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -182,7 +182,7 @@ function IndicatorForm({ initial, onSaved }: any) {
           <option value="">По региону в целом</option>
           {meta.data?.organizations.map((o: any) => (
             <option key={o.id} value={o.id}>
-              {o.name}
+              {plain(o.name)}
             </option>
           ))}
         </select>
@@ -279,7 +279,7 @@ export function Indicators({ start, end }: { start: number; end: number }) {
                 <td>{e.year}</td>
                 <td>
                   <strong>{e.name}</strong>
-                  {e.organization && <small>{e.organization}</small>}
+                  {e.organization && <small>{plain(e.organization)}</small>}
                 </td>
                 <td className="indicator-value">
                   {number(e.value)} {e.unit}
