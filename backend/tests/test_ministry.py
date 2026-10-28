@@ -167,7 +167,7 @@ def test_ministry_role_is_assigned_only_by_federation(env):
     switched = {**headers["admin"], "X-Active-Role": "ministry"}
     assert client.get("/api/reports/population", headers=switched).status_code == 200
     # loading demo data again does not duplicate the ministry account
-    seed_module.seed(demo=True)
+    seed_module.seed(demo=True, extras=False)
     with factory() as db:
         assert (
             db.scalar(

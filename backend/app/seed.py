@@ -15,6 +15,7 @@ from app.services.documents import OfficialDocument, export_document
 from app.services.protocols import add_version
 from app.services.awards import DEFAULT_AMOUNTS, achievements
 from app.services.standards import STAGES, basis_of, meets, readiness
+from app.services.integrations import issue_token, new_secret
 
 DISCIPLINES = [
     ("Программирование алгоритмическое", "Алгоритмы"),
@@ -294,7 +295,121 @@ def standards_demo(db, admin, coach_user, athletes):
     )
 
 
-def seed(demo=False):
+def demo_user(db, email):
+    return db.scalar(select(User).where(User.email == email))
+
+
+def rank_applications_demo(db):
+    """A coach's rank application and a judge's category application are
+    waiting for the federation, so «Требует внимания» is not empty."""
+    if db.scalar(select(RankApplication.id)):
+        return
+    trainer = demo_user(db, "coach@demo.example")
+    ward = db.scalar(select(Athlete).join(User).where(User.email == "athlete1@demo.example"))
+    referee = db.scalar(select(Judge).join(User).where(User.email == "judge@demo.example"))
+    result = db.scalar(
+        select(CompetitionResult)
+        .join(Competition)
+        .where(
+            CompetitionResult.athlete_id == ward.id,
+            Competition.title == "Демо · Чемпионат Оренбургской области",
+        )
+    )
+    items = [
+        RankApplication(
+            athlete_id=ward.id, result_id=result.id, submitted_by=trainer.id,
+            name="II", comment="Демо · Условие ЕВСК выполнено на чемпионате области",
+            created_at=now() - timedelta(days=3),
+        ),
+        RankApplication(
+            judge_id=referee.id, submitted_by=referee.user_id,
+            name="Судья первой категории", comment="Демо · Судейство двух соревнований",
+            created_at=now() - timedelta(days=2),
+        ),
+    ]
+    db.add_all(items)
+    db.flush()
+    for obj in items:
+        notify(db, admins(db), "Новая заявка на разряд / категорию", obj.name,
+               f"rank-application:{obj.id}")
+
+
+def integrations_demo(db):
+    """A read-only token and a disabled webhook; the token value is not kept,
+    so it only shows how the list looks. The webhook stays off so the worker
+    does not post to the example address."""
+    if db.scalar(select(ApiToken.id)) or db.scalar(select(Webhook.id)):
+        return
+    admin = demo_user(db, "admin@demo.example")
+    _, prefix, digest = issue_token()
+    db.add_all([
+        ApiToken(
+            name="Демо · Сайт регионального отделения", prefix=prefix, token_hash=digest,
+            scopes=["competitions:read", "results:read"], created_by=admin.id,
+            expires_on=date.today() + timedelta(days=180),
+        ),
+        Webhook(
+            name="Демо · Уведомления для портала", url="https://example.org/orencode/webhook",
+            secret=new_secret(), events=["competition.published", "protocol.published"],
+            active=False, created_by=admin.id,
+        ),
+    ])
+
+
+CHAT = [
+    ("coach", 26, "Михаил, по чемпионату области у тебя выполнено условие на II разряд. Заявку я подала."),
+    ("athlete", 25, "Спасибо! Что нужно от меня?"),
+    ("coach", 25, "Ничего, ждём решения федерации. Пока готовься к открытому кубку, разбери задачи на графы."),
+    ("athlete", 1, "Разобрал поиск в ширину, остались вопросы по Дейкстре. Можно на занятии?"),
+]
+
+
+def chat_demo(db):
+    """A short coach chat with a fictional ward; nothing personal in it."""
+    if db.scalar(select(CoachChatMessage.id)):
+        return
+    trainer = demo_user(db, "coach@demo.example")
+    ward = demo_user(db, "athlete1@demo.example")
+    link = db.scalar(
+        select(AthleteCoach)
+        .join(Athlete)
+        .join(Coach, Coach.id == AthleteCoach.coach_id)
+        .where(Athlete.user_id == ward.id, Coach.user_id == trainer.id,
+               AthleteCoach.status == "active")
+    )
+    if not link:
+        return
+    db.add_all([
+        CoachChatMessage(
+            link_id=link.id, sender_id=(trainer if role == "coach" else ward).id,
+            sender_role=role, body="Демо · " + body,
+            created_at=now() - timedelta(hours=hours),
+        )
+        for role, hours, body in CHAT
+    ])
+
+
+def training_demo(db):
+    from app.training_demo import seed_training_demo
+
+    try:
+        seed_training_demo(db)
+    except ValueError as e:
+        print(f"Демо групп и занятий пропущено: {e}")
+
+
+def extras_demo(db):
+    """Idempotent: also tops up a demo base loaded before these features."""
+    ministry_demo(db)
+    rank_applications_demo(db)
+    integrations_demo(db)
+    chat_demo(db)
+    db.flush()
+    training_demo(db)
+
+
+def seed(demo=False, extras=True):
+    """extras=False keeps the base demo set that the tests build on."""
     with SessionLocal() as db:
         for k, v in ROLES:
             if not db.get(Role, k):
@@ -352,8 +467,8 @@ def seed(demo=False):
         if not demo:
             return
         if db.scalar(select(User.id).where(User.email == "admin@demo.example")):
-            # Demo data loaded before the ministry cabinet existed: add only it.
-            ministry_demo(db)
+            # Demo base loaded earlier: add only what newer features need.
+            extras_demo(db) if extras else ministry_demo(db)
             db.commit()
             return
         today = date.today()
@@ -679,7 +794,8 @@ def seed(demo=False):
         awards_demo(db, admin, (today - timedelta(days=30)).year)
         appeals_demo(db, admin, trainer, athletes, cup)
         standards_demo(db, admin, trainer, athletes)
-        ministry_demo(db)
+        db.flush()
+        extras_demo(db) if extras else ministry_demo(db)
         audit(db, Actor(admin, "admin"), "Загрузка фиктивных демоданных", admin)
         notify(
             db,

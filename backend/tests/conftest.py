@@ -43,7 +43,7 @@ def env(monkeypatch):
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(seed_module, "SessionLocal", factory)
-    seed_module.seed(demo=True)
+    seed_module.seed(demo=True, extras=False)
 
     def db_override():
         with factory() as db:
