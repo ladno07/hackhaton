@@ -156,7 +156,14 @@ docs/            модель данных, API, описание сценари
 
 ## Telegram-бот
 
-Добавьте в корневой `.env` значения `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` и `PUBLIC_SITE_URL`, затем выполните:
+Бот проекта: [@orencode_bot](https://t.me/orencode_bot). Добавьте в корневой `.env` значения `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` и `PUBLIC_SITE_URL`:
+
+```dotenv
+TELEGRAM_BOT_TOKEN=8232377481:AAFocZv6xGoJDm7Xh24QQg66d-_OK6jAm1M
+TELEGRAM_BOT_USERNAME=orencode_bot
+```
+
+Затем выполните:
 
 ```powershell
 docker compose --profile telegram up --build -d
