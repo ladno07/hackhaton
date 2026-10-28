@@ -415,8 +415,9 @@ def parse_csv(raw):
     return rows
 
 
-def to_results(db, comp, rows):
-    """Rows identify athletes by FSP-000123 or internal id, teams by id or name."""
+def to_results(db, comp, rows, partial=False):
+    """Rows identify athletes by FSP-000123 or internal id, teams by id or name.
+    A partial import may leave approved participants out of the protocol."""
     if not rows:
         raise HTTPException(422, "В файле нет строк с результатами")
     teams = {}
@@ -466,7 +467,7 @@ def to_results(db, comp, rows):
         ]
         errors += [
             f"Нет результата участника {db.get(Athlete, a).user.full_name} ({public_athlete_id(a)})"
-            for a in approved if a not in given
+            for a in approved if a not in given and not partial
         ]
     if errors:
         raise HTTPException(422, "; ".join(errors[:20]))

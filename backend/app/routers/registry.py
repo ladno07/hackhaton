@@ -19,6 +19,7 @@ from app.services.notifications import notify, link_change_content
 from app.services.path import personal_path
 from app.services.ratings import rating_levels
 from app.services.athlete_ids import public_athlete_id
+from app.services.platforms import logins, save_login
 
 router = APIRouter(tags=["Реестры и профили"])
 MINISTRY_FIELDS = [
@@ -67,6 +68,7 @@ def athlete_view(db, athlete):
             {**row(p), "organization": db.get(Organization, p.organization_id).name}
             for p in memberships(db, athlete.id)
         ],
+        "platform_logins": logins(db, athlete.id),
     }
 
 
@@ -202,10 +204,13 @@ def update_profile(
             "rusada_date",
             "organization_id",
             "organization_since",
+            "platform_logins",
         },
     ).items():
         setattr(athlete, key, value)
     athlete.rusada_date = data.rusada_date
+    for platform, login in (data.platform_logins or {}).items():
+        save_login(db, athlete.id, platform, login)
     db.execute(
         delete(AthleteDiscipline).where(AthleteDiscipline.athlete_id == athlete.id)
     )

@@ -60,6 +60,7 @@ def test_merged_migration_upgrade(tmp_path, source):
         "api_tokens",
         "webhooks",
         "webhook_deliveries",
+        "athlete_platform_logins",
     }
     for name, table in Base.metadata.tables.items():
         if name not in added:
@@ -68,7 +69,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     for constraint in list(comp.constraints):
         if constraint.name in {"ck_comp_entry_mode", "ck_comp_team_size"}:
             comp.constraints.remove(constraint)
-    for name in ["entry_mode", "team_min", "team_max", "team_rating", "start_time", "timezone"]:
+    for name in ["entry_mode", "team_min", "team_max", "team_rating", "start_time", "timezone", "results_source"]:
         comp._columns.remove(comp.c[name])
     previous.tables["notifications"]._columns.remove(previous.tables["notifications"].c.telegram_context)
     previous.tables["competition_applications"]._columns.remove(previous.tables["competition_applications"].c.approved_at)
@@ -134,7 +135,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalars().all() == ["0019"]
+        ).scalars().all() == ["0020"]
         tables = set(inspect(conn).get_table_names())
         assert {
             "athlete_organizations",

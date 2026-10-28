@@ -29,6 +29,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-false}
+      CODEFORCES_API_KEY: ${CODEFORCES_API_KEY:-}
+      CODEFORCES_API_SECRET: ${CODEFORCES_API_SECRET:-}
+      YANDEX_CONTEST_TOKEN: ${YANDEX_CONTEST_TOKEN:-}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:8080}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]

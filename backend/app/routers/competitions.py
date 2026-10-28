@@ -577,7 +577,9 @@ def publish(
     return publish_results(db, actor, locked(db, comp_id), data)
 
 
-def publish_results(db, actor, comp, data):
+def publish_results(db, actor, comp, data, partial=False):
+    """partial: the protocol lists only the given approved participants (import
+    from a testing system); the others get no result."""
     if comp.state != "closed":
         raise HTTPException(409, "Закройте приём заявок перед публикацией")
     if comp.end_date > date.today():
@@ -590,8 +592,13 @@ def publish_results(db, actor, comp, data):
             )
         ).all()
     )
-    entries = expand_results(db, comp, data)
-    check_entries(entries, approved)
+    entries = expand_results(db, comp, data, partial)
+    roster = approved
+    if partial:
+        roster = {r.athlete_id for r in entries}
+        if not roster <= approved:
+            raise HTTPException(422, "В протокол можно включить только одобренных участников")
+    check_entries(entries, roster)
     db.add_all(
         [CompetitionResult(competition_id=comp.id, **r.model_dump()) for r in entries]
     )
@@ -630,17 +637,26 @@ def correct(
     return apply_correction(db, actor, comp, data, data.reason)
 
 
-def apply_correction(db, actor, comp, data, reason):
-    """New protocol version with changed places/scores; the roster is kept."""
+def apply_correction(db, actor, comp, data, reason, partial=False):
+    """New protocol version with changed places/scores; the roster is kept.
+    partial: approved participants missing from the protocol may be added."""
     current = {r.athlete_id: r for r in current_results(db, comp.id)}
-    entries = expand_results(db, comp, data)
-    check_entries(entries, current)
+    entries = expand_results(db, comp, data, partial)
+    roster = set(current)
+    if partial:
+        roster |= {r.athlete_id for r in entries} & approved_athletes(db, comp)
+    check_entries(entries, roster)
     fields = ("place", "score", "team_name")
-    changed = [
+    added = [r for r in entries if r.athlete_id not in current]
+    changed = added + [
         r
         for r in entries
-        if any(getattr(current[r.athlete_id], k) != getattr(r, k) for k in fields)
+        if r.athlete_id in current
+        and any(getattr(current[r.athlete_id], k) != getattr(r, k) for k in fields)
     ]
+    for r in added:
+        current[r.athlete_id] = CompetitionResult(competition_id=comp.id, **r.model_dump())
+        db.add(current[r.athlete_id])
     if not changed:
         raise HTTPException(422, "Изменений в протоколе нет")
     # rows keep their ids: ranks and rank applications refer to them
@@ -676,6 +692,17 @@ def apply_correction(db, actor, comp, data, reason):
         "changed": len(changed),
         "rank_warnings": warnings,
     }
+
+
+def approved_athletes(db, comp):
+    return set(
+        db.scalars(
+            select(CompetitionApplication.athlete_id).where(
+                CompetitionApplication.competition_id == comp.id,
+                CompetitionApplication.status == "approved",
+            )
+        )
+    )
 
 
 @router.get("/competitions/{comp_id}/protocol-versions")

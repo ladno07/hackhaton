@@ -248,6 +248,8 @@ class Competition(Base):
     team_rating: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false")
     )
+    # testing system the protocol was loaded from: platform, contest, url, fetched_at
+    results_source: Mapped[dict | None] = mapped_column(JSON)
 
 
 class AgeGroup(Base):
@@ -907,3 +909,24 @@ class WebhookDelivery(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AthletePlatformLogin(Base):
+    """Login of an athlete on a testing system; results of a contest there
+    are matched to athletes by it. login_key is the case-folded login."""
+
+    __tablename__ = "athlete_platform_logins"
+    __table_args__ = (
+        UniqueConstraint("athlete_id", "platform"),
+        UniqueConstraint("platform", "login_key"),
+        CheckConstraint(
+            "platform IN ('codeforces','yandex_contest','ctfd')", name="ck_platform_login"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(
+        ForeignKey("athletes.id", ondelete="CASCADE"), index=True
+    )
+    platform: Mapped[str] = mapped_column(String(20))
+    login: Mapped[str] = mapped_column(String(100))
+    login_key: Mapped[str] = mapped_column(String(100))

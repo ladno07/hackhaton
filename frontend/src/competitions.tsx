@@ -54,6 +54,7 @@ import {
   Table,
 } from "./components/shared";
 import { CompetitionTeams, TeamResultsEditor } from "./competition-teams";
+import { PlatformImport, ResultsSource } from "./platform-import";
 const REGULATION_ACCEPT = ".pdf,.docx,.doc,.odt";
 const REGULATION_MAX_MB = 10;
 const regulationForm = (file: File) => {
@@ -1238,13 +1239,16 @@ export function CompetitionDetail() {
                       </div>
                       <div className="button-row">
                         {role === "admin" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCorrecting(true)}
-                          >
-                            Исправить протокол
-                          </Button>
+                          <>
+                            <PlatformImport comp={comp} />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCorrecting(true)}
+                            >
+                              Исправить протокол
+                            </Button>
+                          </>
                         )}
                         <ExportButtons
                           base={"/exports/protocol/" + id}
@@ -1281,15 +1285,28 @@ export function CompetitionDetail() {
                         </tr>
                       ))}
                     </Table>
+                    <ResultsSource source={comp.results_source} />
                     <ProtocolHistory id={id} />
                   </>
                 ) : role === "admin" && comp.state === "closed" ? (
-                  <ResultsEditor
-                    key={comp.applications
-                      .map((a: any) => a.id + a.status)
-                      .join(",")}
-                    comp={comp}
-                  />
+                  <>
+                    <div className="panel-heading">
+                      <div>
+                        <h2>Результаты</h2>
+                        <p>
+                          Внесите вручную или загрузите таблицу из Codeforces,
+                          Яндекс Контеста или CTFd.
+                        </p>
+                      </div>
+                      <PlatformImport comp={comp} />
+                    </div>
+                    <ResultsEditor
+                      key={comp.applications
+                        .map((a: any) => a.id + a.status)
+                        .join(",")}
+                      comp={comp}
+                    />
+                  </>
                 ) : (
                   <Empty
                     text="Протокол ещё не опубликован"
