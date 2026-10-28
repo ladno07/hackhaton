@@ -8,6 +8,7 @@ Level = Literal["regional", "interregional", "russian_championship", "russian_ju
 Status = Literal["regional", "interregional", "national"]
 RatingClass = Literal["main", "junior", "other"]
 Sex = Literal["male", "female"]
+Platform = Literal["codeforces", "yandex_contest", "ctfd"]
 
 
 class CoachChatMessageIn(BaseModel):
@@ -220,6 +221,9 @@ class ProfileIn(Strict):
     rusada_date: date | None = None
     rusada_certificate: HttpUrl | None = None
     disciplines: list[Enrollment]
+    # logins on testing systems; an empty value removes the login, a missing
+    # key keeps it, a missing field leaves all logins as they are
+    platform_logins: dict[Platform, str] | None = None
 
 
 class StaffCardIn(Strict):
@@ -583,3 +587,17 @@ class ResultsImportIn(Strict):
     results: list[ImportRowIn] = Field(min_length=1, max_length=10000)
     # required when the protocol is already published: a new version is made
     reason: str | None = Field(None, min_length=5, max_length=2000)
+
+
+class PlatformImportIn(Strict):
+    """Results from a testing system: a contest number on Codeforces or Yandex
+    Contest, the address of a CTFd instance."""
+
+    platform: Platform
+    contest: str = Field(min_length=1, max_length=300)
+    # access token for this request only, never stored
+    token: str | None = Field(None, max_length=500)
+    # manual matching of logins absent in profiles: login -> athlete id
+    bindings: dict[str, int] = Field(default_factory=dict, max_length=1000)
+    reason: str | None = Field(None, min_length=5, max_length=2000)
+    dry_run: bool = True

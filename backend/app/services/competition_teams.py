@@ -76,7 +76,7 @@ def check_roster(db, comp, team, actor=None):
     return roster
 
 
-def expand_results(db, comp, data):
+def expand_results(db, comp, data, partial=False):
     if comp.entry_mode != "team":
         if data.team_results:
             raise HTTPException(422, "Для личного зачёта нужны результаты спортсменов")
@@ -95,7 +95,11 @@ def expand_results(db, comp, data):
         )
     }
     ids = [r.team_id for r in data.team_results]
-    if set(ids) != set(teams) or len(ids) != len(set(ids)):
+    if (
+        not set(ids) <= set(teams)
+        or not partial and set(ids) != set(teams)
+        or len(ids) != len(set(ids))
+    ):
         raise HTTPException(422, "Нужен один результат для каждой допущенной команды")
     results = []
     for r in data.team_results:

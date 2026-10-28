@@ -162,3 +162,7 @@ API: `GET /api/appeals?status=`, `GET /api/appeals/options`, `POST /api/appeals`
 Пороги в демо-данных — ориентир для показа, их нужно сверить с приказом Минспорта России об утверждении ФССП по виду спорта. В демо: `athlete@demo.example` (УТ → ССМ) выполнила 4 норматива из 5, но без КМС; у тренера `coach@demo.example` один спортсмен готов к переводу НП → УТ, другой выполнил 3 из 5; один спортсмен переведён в прошлом году.
 
 API: `GET /api/standards/meta`, `GET /api/standards?stage=&category=&sex=&discipline_id=&archived=`, `POST /api/standards`, `PUT /api/standards/{id}`, `POST /api/standards/{id}/archive|restore`, `GET /api/attestation?ready=`, `GET /api/attestation/history`, `GET /api/attestation/{athlete_id}`, `POST /api/attestation/{athlete_id}/results`, `DELETE /api/attestation/results/{id}`, `POST /api/attestation/{athlete_id}/transfer`, `GET /api/exports/attestation.{pdf|docx|xlsx}?stage=`.
+
+## Протокол из тестирующей системы
+
+В карточке соревнования федерация нажимает «Загрузить из…», выбирает Codeforces, Яндекс Контест или CTFd и вводит номер контеста. Платформа забирает итоговую таблицу, сопоставляет логины с профилями спортсменов («Логины на платформах»), пересчитывает места среди участников соревнования и показывает предпросмотр; ненайденного участника можно привязать вручную. После публикации всё как при обычном протоколе. Подробнее — [INTEGRATIONS.md](INTEGRATIONS.md#протокол-из-тестирующей-системы).

@@ -13,7 +13,7 @@ from app.db import Base
 
 
 @pytest.mark.parametrize(
-    "source", ["0006", "0007", "0007_teams", "0008", "0008_passports", "0010", "0011", "0014", "0007_telegram", "0008_telegram", "0009_telegram"]
+    "source", ["0006", "0007", "0007_teams", "0008", "0008_passports", "0010", "0011", "0014", "0007_telegram", "0008_telegram", "0009_telegram", "0020", "0021", "0020_training", "0021_training", "0022"]
 )
 def test_merged_migration_upgrade(tmp_path, source):
     url = "sqlite:///" + (tmp_path / "migration.db").as_posix()
@@ -61,6 +61,7 @@ def test_merged_migration_upgrade(tmp_path, source):
         "api_tokens",
         "webhooks",
         "webhook_deliveries",
+        "athlete_platform_logins",
     }
     for name, table in Base.metadata.tables.items():
         if name not in added:
@@ -69,7 +70,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     for constraint in list(comp.constraints):
         if constraint.name in {"ck_comp_entry_mode", "ck_comp_team_size"}:
             comp.constraints.remove(constraint)
-    for name in ["entry_mode", "team_min", "team_max", "team_rating", "start_time", "timezone"]:
+    for name in ["entry_mode", "team_min", "team_max", "team_rating", "start_time", "timezone", "results_source"]:
         comp._columns.remove(comp.c[name])
     previous.tables["notifications"]._columns.remove(previous.tables["notifications"].c.telegram_context)
     previous.tables["competition_applications"]._columns.remove(previous.tables["competition_applications"].c.approved_at)
@@ -132,12 +133,18 @@ def test_merged_migration_upgrade(tmp_path, source):
                 {"legacy": source.split("_")[0]},
             )
         engine.dispose()
+    if source in {"0020_training", "0021_training"}:
+        # Standalone D3 used numeric IDs before joining the platform-import branch.
+        engine = create_engine(url)
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE alembic_version SET version_num = :legacy"), {"legacy": source.split("_")[0]})
+        engine.dispose()
     upgrade("head")
     engine = create_engine(url)
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalars().all() == ["0022"]
+        ).scalars().all() == ["0023"]
         tables = set(inspect(conn).get_table_names())
         assert {
             "athlete_organizations",

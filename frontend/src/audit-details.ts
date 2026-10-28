@@ -81,6 +81,10 @@ const labels: Record<string, string> = {
   done: "Выполнено",
   archived_at: "Дата архивации",
   archive_reason: "Причина архивации",
+  platform: "Площадка",
+  contest: "Контест",
+  count: "Записей",
+  bound_logins: "Привязанные логины",
 };
 
 function label(key: string): string {

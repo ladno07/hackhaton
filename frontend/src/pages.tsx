@@ -45,6 +45,7 @@ import {
 import { PassportPanel } from "./passport-panel";
 import { auditDetails, auditEntity } from "./audit-details";
 import { ProfileDocuments, ProfileSportsSummary } from "./profile-documents";
+import { platformNames } from "./platform-import";
 const attentionGroups: [string, string, string][] = [
   ["applications", "Заявки на соревнования", "/competitions"],
   ["rank_applications", "Заявки на разряды и категории", "/ranks"],
@@ -558,6 +559,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
     rusada_date: athlete.rusada_date || null,
     rusada_certificate: athlete.rusada_certificate || null,
     disciplines: athlete.disciplines || [],
+    platform_logins: athlete.platform_logins || {},
   });
   const change = (k: string, val: any) => setV({ ...v, [k]: val });
   const moved =
@@ -770,6 +772,38 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             </div>
           );
         })}
+      </div>
+      <div className="form-section">
+        <h3>Логины на платформах</h3>
+        <p className="inline-note">
+          По ним результаты контестов подтягиваются в протокол соревнования.
+        </p>
+        <div className="form-grid">
+          {Object.entries(platformNames).map(([k, n]) => (
+            <Field
+              label={n}
+              key={k}
+              hint={
+                (athlete.unconfirmed_platform_logins || []).includes(k) &&
+                (v.platform_logins[k] || "") === (athlete.platform_logins?.[k] || "")
+                  ? "Не подтверждён федерацией: подтвердят при первом импорте протокола"
+                  : undefined
+              }
+            >
+              <input
+                maxLength={100}
+                autoComplete="off"
+                value={v.platform_logins[k] || ""}
+                onChange={(e) =>
+                  change("platform_logins", {
+                    ...v.platform_logins,
+                    [k]: e.target.value,
+                  })
+                }
+              />
+            </Field>
+          ))}
+        </div>
       </div>
       <div className="form-grid">
         <Field label="Дата прохождения РУСАДА">

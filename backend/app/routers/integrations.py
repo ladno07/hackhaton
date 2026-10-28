@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import *
-from app.schemas import ApiTokenIn, ResultsImportIn, WebhookIn, WebhookPatch
+from app.schemas import ApiTokenIn, PlatformImportIn, ResultsImportIn, WebhookIn, WebhookPatch
 from app.security import Actor, allow
 from app.services.common import audit, require
 from app.services.competition_teams import expand_results
@@ -28,6 +28,7 @@ from app.services.integrations import (
     to_results,
     token_view,
 )
+from app.services import platforms
 from app.routers.competitions import apply_correction, locked, publish_results
 
 router = APIRouter(tags=["Интеграции"])
@@ -219,10 +220,11 @@ def retry(
 # --- import of results ------------------------------------------------------
 
 
-def import_results(db, actor, comp, rows, reason, dry_run):
+def import_results(db, actor, comp, rows, reason, dry_run, partial=False):
     """Publishes the first protocol or, when it is published, a corrected
-    version with the given reason. A dry run only validates and previews."""
-    data = to_results(db, comp, rows)
+    version with the given reason. A dry run only validates and previews.
+    partial: approved participants absent from the rows stay out of the protocol."""
+    data = to_results(db, comp, rows, partial)
     if comp.state == "published":
         if not reason:
             raise HTTPException(
@@ -242,16 +244,20 @@ def import_results(db, actor, comp, rows, reason, dry_run):
                 )
             )
         )
-    entries = expand_results(db, comp, data)
+    entries = expand_results(db, comp, data, partial)
+    if partial:
+        # a published protocol keeps its rows and may gain new participants
+        given = {e.athlete_id for e in entries}
+        roster = set(roster) | given if comp.state == "published" else given
     check_entries(entries, roster)
     mode = "correction" if comp.state == "published" else "publication"
     summary = {"mode": mode, "count": len(entries), "rows": preview(db, comp, entries)}
     if dry_run:
         return {**summary, "dry_run": True}
     result = (
-        apply_correction(db, actor, comp, data, reason)
+        apply_correction(db, actor, comp, data, reason, partial)
         if mode == "correction"
-        else publish_results(db, actor, comp, data)
+        else publish_results(db, actor, comp, data, partial)
     )
     return {**summary, **result, "dry_run": False}
 
@@ -273,6 +279,56 @@ async def import_file(
         audit(db, actor, "Импорт результатов из файла", comp,
               {"file": file.filename, "count": result["count"], "mode": result["mode"]})
     return result
+
+
+@router.post("/competitions/{comp_id}/results/platform")
+def import_platform(
+    comp_id: int,
+    data: PlatformImportIn,
+    actor: Actor = Depends(allow("admin")),
+    db: Session = Depends(get_db),
+):
+    """Standings of a contest on Codeforces, Yandex Contest or CTFd. A dry run
+    reports the matching even when it is incomplete, so logins can be bound."""
+    if require(db, Competition, comp_id).state not in ("closed", "published"):
+        raise HTTPException(409, "Закройте приём заявок перед импортом результатов")
+    # the network call goes before the row lock
+    standings = platforms.fetch(data.platform, data.contest, data.token)
+    comp = locked(db, comp_id)
+    found = platforms.match(db, comp, data.platform, standings, data.bindings)
+    source = {
+        "platform": data.platform,
+        "contest": data.contest.strip(),
+        "title": standings.title,
+        "url": standings.url,
+        "fetched_at": now().isoformat(),
+    }
+    report = {
+        "source": source,
+        "ready": found.ready,
+        "matched": found.matched,
+        "unmatched": found.unmatched,
+        "missing": found.missing,
+        "conflicts": found.conflicts,
+        "unconfirmed": found.unconfirmed,
+    }
+    if not found.ready:
+        if not data.dry_run:
+            raise HTTPException(
+                422, "; ".join(found.conflicts[:20]) or "Ни один участник соревнования не найден в таблице"
+            )
+        mode = "correction" if comp.state == "published" else "publication"
+        return {**report, "mode": mode, "count": 0, "rows": [], "dry_run": True}
+    # participants without a login or absent from the table get no result
+    result = import_results(db, actor, comp, found.rows, data.reason, data.dry_run, partial=True)
+    if not data.dry_run:
+        for login, athlete_id in found.bound.items():
+            platforms.save_login(db, athlete_id, data.platform, login, confirmed=True)
+        comp.results_source = source
+        audit(db, actor, "Импорт результатов с площадки", comp,
+              {"platform": data.platform, "contest": source["contest"], "count": result["count"],
+               "mode": result["mode"], "bound_logins": found.bound})
+    return {**report, **result}
 
 
 # --- API for external systems -----------------------------------------------

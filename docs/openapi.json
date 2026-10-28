@@ -10737,6 +10737,78 @@
         }
       }
     },
+    "/api/competitions/{comp_id}/results/platform": {
+      "post": {
+        "tags": [
+          "Интеграции"
+        ],
+        "summary": "Import Platform",
+        "description": "Standings of a contest on Codeforces, Yandex Contest or CTFd. A dry run\nreports the matching even when it is incomplete, so logins can be bound.",
+        "operationId": "import_platform_api_competitions__comp_id__results_platform_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "comp_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Comp Id"
+            }
+          },
+          {
+            "name": "x-active-role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Active-Role"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformImportIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -12172,6 +12244,71 @@
         ],
         "title": "OrganizationIn"
       },
+      "PlatformImportIn": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "codeforces",
+              "yandex_contest",
+              "ctfd"
+            ],
+            "title": "Platform"
+          },
+          "contest": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Contest"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "bindings": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "maxProperties": 1000,
+            "title": "Bindings"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "platform",
+          "contest"
+        ],
+        "title": "PlatformImportIn",
+        "description": "Results from a testing system: a contest number on Codeforces or Yandex\nContest, the address of a CTFd instance."
+      },
       "ProfileIn": {
         "properties": {
           "full_name": {
@@ -12268,6 +12405,27 @@
             },
             "type": "array",
             "title": "Disciplines"
+          },
+          "platform_logins": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "codeforces",
+                    "yandex_contest",
+                    "ctfd"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Logins"
           }
         },
         "additionalProperties": false,

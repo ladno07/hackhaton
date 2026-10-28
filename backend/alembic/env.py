@@ -18,6 +18,14 @@ else:
     with engine.connect() as connection:
         with connection.begin():
             tables = set(inspect(connection).get_table_names())
+            # Standalone training installs used 0020/0021 before platform
+            # imports joined main. Preserve their applied schema under unique IDs.
+            if "alembic_version" in tables and "training_groups" in tables and "athlete_platform_logins" not in tables:
+                for legacy, renamed in (("0020", "0020_training"), ("0021", "0021_training")):
+                    connection.execute(
+                        text("UPDATE alembic_version SET version_num = :renamed WHERE version_num = :legacy"),
+                        {"legacy": legacy, "renamed": renamed},
+                    )
             # Bot databases used the same numeric revisions as main. Identify
             # that historical branch by its tables before resolving revisions.
             if "alembic_version" in tables and "telegram_links" in tables:

@@ -19,6 +19,7 @@ from app.services.notifications import notify, link_change_content
 from app.services.path import personal_path
 from app.services.ratings import rating_levels
 from app.services.athlete_ids import public_athlete_id, parse_athlete_id
+from app.services.platforms import login_key, logins, save_login, unconfirmed_logins
 
 router = APIRouter(tags=["Реестры и профили"])
 MINISTRY_FIELDS = [
@@ -67,6 +68,8 @@ def athlete_view(db, athlete):
             {**row(p), "organization": db.get(Organization, p.organization_id).name}
             for p in memberships(db, athlete.id)
         ],
+        "platform_logins": logins(db, athlete.id),
+        "unconfirmed_platform_logins": unconfirmed_logins(db, athlete.id),
     }
 
 
@@ -202,10 +205,19 @@ def update_profile(
             "rusada_date",
             "organization_id",
             "organization_since",
+            "platform_logins",
         },
     ).items():
         setattr(athlete, key, value)
     athlete.rusada_date = data.rusada_date
+    saved = logins(db, athlete.id)
+    for platform, login in (data.platform_logins or {}).items():
+        # the federation vouches for a login it enters; resaving the form
+        # with the same value confirms nothing
+        changed = login_key(login) != login_key(saved.get(platform, ""))
+        save_login(
+            db, athlete.id, platform, login, confirmed=actor.role == "admin" and changed
+        )
     db.execute(
         delete(AthleteDiscipline).where(AthleteDiscipline.athlete_id == athlete.id)
     )
