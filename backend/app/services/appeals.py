@@ -133,7 +133,7 @@ def appeal_view(db, actor, a):
     if a.subject == "result":
         subject = f"Протокол «{comp.title}», редакция {a.protocol_version}"
         if entry:
-            subject += f": {entry['place']} место, {entry['score']:g} баллов"
+            subject += f": {entry['place']} место, {entry['score']:g} б."
     else:
         subject = "Решение о нарушении: " + violation_text(violation)
     owner_side = actor.role in ("athlete", "coach")

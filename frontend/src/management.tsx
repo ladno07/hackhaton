@@ -38,6 +38,10 @@ import {
   roleNames,
   sexNames,
   today,
+  plain,
+  years,
+  count,
+  decimal,
 } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
@@ -167,7 +171,7 @@ export function Registry() {
                 <option value="">Все организации</option>
                 {meta.data?.organizations.map((o: any) => (
                   <option key={o.id} value={o.id}>
-                    {o.name}
+                    {plain(o.name)}
                   </option>
                 ))}
               </select>
@@ -222,7 +226,7 @@ export function Registry() {
                     <td>
                       <div className="person-cell">
                         <span className="avatar avatar-soft">
-                          {a.full_name.replace("Демо · ", "").slice(0, 1)}
+                          {plain(a.full_name).slice(0, 1)}
                         </span>
                         <div>
                           <Link
@@ -230,17 +234,17 @@ export function Registry() {
                             to={`/athletes/${a.id}/profile`}
                           >
                             <strong>
-                              {a.full_name.replace("Демо · ", "")}
+                              {plain(a.full_name)}
                             </strong>
                           </Link>
                           <small>
-                            {a.age} лет · {a.public_id}
+                            {years(a.age)} · {a.public_id}
                           </small>
                         </div>
                       </div>
                     </td>
                     <td>
-                      {a.organization}
+                      {plain(a.organization)}
                       <small>{a.municipality}</small>
                     </td>
                     <td>
@@ -319,11 +323,11 @@ export function Registry() {
                       <td>
                         <div className="person-cell">
                           <span className="avatar avatar-soft">
-                            {c.full_name.replace("Демо · ", "").slice(0, 1)}
+                            {plain(c.full_name).slice(0, 1)}
                           </span>
                           <div>
                             <strong>
-                              {c.full_name.replace("Демо · ", "")}
+                              {plain(c.full_name)}
                             </strong>
                             <small>
                               {c.experience_since
@@ -335,7 +339,7 @@ export function Registry() {
                         </div>
                       </td>
                       <td>
-                        {c.organization}
+                        {plain(c.organization)}
                         <small>{c.municipality}</small>
                       </td>
                       <td>
@@ -425,7 +429,7 @@ export function Registry() {
                 .map((o: any) => (
                   <tr key={o.id}>
                     <td>
-                      <strong>{o.name}</strong>
+                      <strong>{plain(o.name)}</strong>
                     </td>
                     <td>{o.kind}</td>
                     <td>{o.municipality}</td>
@@ -622,7 +626,7 @@ function RankRequest({ onDone, initial = {} }: any) {
             <option value="">Выберите опубликованный результат</option>
             {results.data?.map((r: any) => (
               <option key={r.id} value={r.id}>
-                {r.full_name} · {r.title} · место {r.place}
+                {plain(r.full_name)} · {plain(r.title)} · место {r.place}
               </option>
             ))}
           </select>
@@ -696,7 +700,7 @@ function RankReview({ application, onDone }: any) {
       }}
     >
       <p>
-        {application.full_name} · <strong>{application.name}</strong>
+        {plain(application.full_name)} · <strong>{application.name}</strong>
       </p>
       <Field label="Решение">
         <select
@@ -791,7 +795,7 @@ export function Ranks() {
                 (r: any) => (
                   <tr key={(r.athlete_id ? "a" : "j") + r.id}>
                     <td>
-                      <strong>{r.full_name}</strong>
+                      <strong>{plain(r.full_name)}</strong>
                     </td>
                     <td>{r.name}</td>
                     <td>
@@ -806,9 +810,7 @@ export function Ranks() {
                       </span>
                     </td>
                     <td>
-                      {r.result_id
-                        ? "Результат #" + r.result_id
-                        : "Решение федерации"}
+                      {r.basis ? plain(r.basis) : "Решение федерации"}
                     </td>
                   </tr>
                 ),
@@ -831,7 +833,7 @@ export function Ranks() {
               {list.data.map((a: any) => (
                 <tr key={a.id}>
                   <td>
-                    <strong>{a.full_name}</strong>
+                    <strong>{plain(a.full_name)}</strong>
                     <small>{date(a.created_at)}</small>
                   </td>
                   <td>
@@ -843,9 +845,7 @@ export function Ranks() {
                     </small>
                   </td>
                   <td>
-                    {a.result_id
-                      ? "Результат #" + a.result_id
-                      : "Судейская категория"}
+                    {a.basis ? plain(a.basis) : "Судейская категория"}
                   </td>
                   <td>
                     <Badge value={a.status} />
@@ -884,8 +884,8 @@ export function Ranks() {
               >
                 {candidates.data.map((c: any, i: number) => (
                   <tr key={i}>
-                    <td>{c.full_name}</td>
-                    <td>{c.competition}</td>
+                    <td>{plain(c.full_name)}</td>
+                    <td>{plain(c.competition)}</td>
                     <td>{c.rank}</td>
                     <td>{c.source}</td>
                   </tr>
@@ -1028,25 +1028,26 @@ export function Ratings() {
                       className="text-link"
                       to={`/athletes/${r.athlete_id}/profile`}
                     >
-                      <strong>{r.full_name.replace("Демо · ", "")}</strong>
+                      <strong>{plain(r.full_name)}</strong>
                     </Link>
-                    <small>{r.age} лет</small>
+                    <small>{years(r.age)}</small>
                     <details>
                       <summary>Как рассчитан рейтинг</summary>
                       {r.breakdown.map((b: any) => (
                         <small key={b.competition_id}>
-                          {b.title}: место {b.place} → {b.points} баллов
+                          {plain(b.title)}: место {b.place} →{" "}
+                          {count(b.points, "балл", "балла", "баллов")}
                         </small>
                       ))}
                       <small>
-                        Сумма × {r.coefficient} = {r.points}
+                        Сумма × {decimal(r.coefficient)} = {r.points}
                       </small>
                     </details>
                   </td>
                   <td>{r.rank}</td>
                   <td>
                     <span className={r.coefficient > 1 ? "coefficient" : ""}>
-                      ×{r.coefficient}
+                      ×{decimal(r.coefficient)}
                     </span>
                   </td>
                   <td>
@@ -1087,7 +1088,7 @@ export function Ratings() {
           <div>
             <h2>Сборная Оренбургской области</h2>
             <p>
-              {team.data?.length || 0} спортсменов в сохранённом составе · сезон{" "}
+              {count(team.data?.length || 0, "спортсмен", "спортсмена", "спортсменов")} в сохранённом составе · сезон{" "}
               {season}
             </p>
           </div>
@@ -1113,7 +1114,7 @@ export function Ratings() {
               className="text-link"
               to={`/athletes/${t.athlete_id}/profile`}
             >
-              {t.full_name}
+              {plain(t.full_name)}
             </Link>
             {!t.eligible && (
               <Badge value="rejected" label="Действует отстранение" />
@@ -1182,7 +1183,7 @@ export function Reports() {
       </PageTitle>
       <section className="panel">
         <div className="toolbar">
-          <Field label="С года">
+          <Field label="Год с">
             <input
               type="number"
               min="1970"
@@ -1191,7 +1192,7 @@ export function Reports() {
               onChange={(e) => setStart(+e.target.value)}
             />
           </Field>
-          <Field label="По год">
+          <Field label="Год по">
             <input
               type="number"
               min={start + 1}
@@ -1215,7 +1216,7 @@ export function Reports() {
               <option value="">Все организации</option>
               {meta.data?.organizations.map((o: any) => (
                 <option key={o.id} value={o.id}>
-                  {o.name}
+                  {plain(o.name)}
                 </option>
               ))}
             </select>
@@ -1289,7 +1290,7 @@ function UserRoles({ u }: any) {
   return (
     <tr>
       <td>
-        <strong>{u.full_name}</strong>
+        <strong>{plain(u.full_name)}</strong>
         <small>{u.email}</small>
       </td>
       <td>
@@ -1562,7 +1563,7 @@ export function Settings() {
   const [userSearch, setUserSearch] = useState("");
   const searchTerms = userSearch.toLocaleLowerCase("ru").trim().split(/\s+/).filter(Boolean);
   const filteredUsers = users.data?.filter((u: any) => {
-    const text = `${u.full_name} ${u.email}`.toLocaleLowerCase("ru");
+    const text = `${plain(u.full_name)} ${u.email}`.toLocaleLowerCase("ru");
     return searchTerms.every((term) => text.includes(term));
   });
   const rules = useData("/rating-rules");

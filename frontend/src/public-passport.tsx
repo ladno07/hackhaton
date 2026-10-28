@@ -1,6 +1,6 @@
 import { useParams, useSearchParams, Link, Navigate } from "react-router-dom";
 import { useAuth, useData, useToast } from "./state";
-import { date, download } from "./lib";
+import { date, download, plain, count } from "./lib";
 import { Button } from "./components/ui/button";
 import { PageTitle, State, Empty, Table } from "./components/shared";
 
@@ -65,7 +65,7 @@ export function AthleteProfileView() {
                     {data.results.map((r: any, i: number) => (
                       <tr key={i}>
                         <td>
-                          <strong>{r.title}</strong>
+                          <strong>{plain(r.title)}</strong>
                           {r.team_name && <small>Команда: {r.team_name}</small>}
                         </td>
                         <td>{date(r.date)}</td>
@@ -97,7 +97,7 @@ export function AthleteProfileView() {
                       <p key={r.discipline}>
                         <strong>{r.discipline}</strong>
                         <br />
-                        {r.points} баллов · {r.position} место
+                        {count(r.points, "балл", "балла", "баллов")} · {r.position} место
                       </p>
                     ))
                   ) : (
@@ -196,14 +196,14 @@ export function PrivateCertificate() {
       <State query={query}>
         {data && (
           <section className="panel info-card">
-            <h2>{data.entry.full_name}</h2>
-            <p>{data.competition.title}</p>
+            <h2>{plain(data.entry.full_name)}</h2>
+            <p>{plain(data.competition.title)}</p>
             <p>
               {date(data.competition.start_date)} ·{" "}
               {data.competition.discipline}
             </p>
             <p>
-              {data.entry.organization}
+              {plain(data.entry.organization)}
               {data.entry.team_name && " · Команда: " + data.entry.team_name}
             </p>
             <p>

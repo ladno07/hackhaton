@@ -401,7 +401,8 @@ def seed(demo=False):
                 JudgeCategory(
                     judge_id=j.id,
                     name="Судья второй категории",
-                    assigned_on=today - timedelta(days=300),
+                    # two-year term, still valid for the demo period
+                    assigned_on=today - timedelta(days=410),
                     expires_on=today + timedelta(days=320),
                     order_number="ДЕМО-26/С",
                 )
@@ -597,9 +598,11 @@ def seed(demo=False):
                 start_date=start,
                 end_date=start + timedelta(days=1),
                 deadline=start - timedelta(days=3),
-                location="Оренбург · Технопарк"
-                if i % 2 == 0
-                else "Онлайн-платформа",
+                location=[
+                    "Оренбург · Технопарк",
+                    "Онлайн-платформа",
+                    "Оренбург · Технопарк и онлайн-платформа",
+                ][i % 3],
                 format=["onsite", "online", "hybrid"][i % 3],
                 status="regional",
                 rating_level="regional",

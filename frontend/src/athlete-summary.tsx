@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useData } from "./state";
-import { date } from "./lib";
+import { date, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Empty, Field, PageTitle, Stat, State, Table } from "./components/shared";
 
@@ -45,10 +45,10 @@ export function AthleteSummary() {
           <Stat label="Лучшее место" value={data.stats.best_place} note="За выбранный период" />
         </div>
         <section className="panel section-gap">
-          <div className="panel-heading"><h2>Выступления · {data.athlete.full_name}</h2></div>
+          <div className="panel-heading"><h2>Выступления · {plain(data.athlete.full_name)}</h2></div>
           {data.results.length ? <Table heads={["Соревнование", "Дата", "Дисциплина", "Место", "Баллы", "Команда"]}>
             {data.results.map((r: any) => <tr key={r.id}>
-              <td><Link to={`/competitions/${r.competition_id}`}><strong>{r.title}</strong></Link></td>
+              <td><Link to={`/competitions/${r.competition_id}`}><strong>{plain(r.title)}</strong></Link></td>
               <td>{date(r.start_date)}</td><td>{r.discipline}</td>
               <td><span className={r.place <= 3 ? "place-medal" : "place"}>{r.place}</span></td>
               <td>{r.score}</td><td>{r.team_name || "—"}</td>

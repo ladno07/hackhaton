@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Building2, CalendarDays, MapPin, Users } from "lucide-react";
-import { api, date, formats } from "./lib";
+import { api, date, formats, plural, plain } from "./lib";
 import { FspLogo } from "./components/logo";
 import { Badge, Empty, State } from "./components/shared";
 
@@ -13,13 +13,6 @@ const steps = [
   ["Подайте заявку", "Выберите соревнование по возрасту и дисциплине."],
 ];
 
-// 1 место, 2 места, 5 мест
-const plural = (n: number, one: string, few: string, many: string) =>
-  n % 10 === 1 && n % 100 !== 11
-    ? one
-    : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)
-      ? few
-      : many;
 
 // Публичная страница без входа: только агрегаты и опубликованные события.
 export function Navigator() {
@@ -138,7 +131,7 @@ export function Navigator() {
                 {places.map((p: any) => (
                   <div className="panel navigator-card" key={p.id}>
                     <strong>
-                      <Building2 size={16} /> {p.name.replace("Демо · ", "")}
+                      <Building2 size={16} /> {plain(p.name)}
                     </strong>
                     <p>
                       <MapPin size={13} /> {p.municipality} · {p.kind}
@@ -180,7 +173,7 @@ export function Navigator() {
                       </span>
                     </div>
                     <div>
-                      <h3>{c.title.replace("Демо · ", "")}</h3>
+                      <h3>{plain(c.title)}</h3>
                       <p>
                         {names[c.discipline_id]} · {c.location} ·{" "}
                         {formats[c.format]} ·{" "}

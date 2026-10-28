@@ -19,6 +19,14 @@ from app.services.ratings import ranking, RANKS
 router = APIRouter(tags=["Федерация"])
 
 
+def result_basis(db: Session, result_id: int | None) -> str | None:
+    """Human-readable basis: competition title and place instead of a bare id."""
+    result = db.get(CompetitionResult, result_id) if result_id else None
+    if not result:
+        return None
+    return f"{db.get(Competition, result.competition_id).title}, {result.place} место"
+
+
 @router.get("/rank-applications")
 def rank_applications(
     actor: Actor = Depends(current_actor), db: Session = Depends(get_db)
@@ -34,6 +42,7 @@ def rank_applications(
             "full_name": db.get(Athlete, x.athlete_id).user.full_name
             if x.athlete_id
             else db.get(Judge, x.judge_id).user.full_name,
+            "basis": result_basis(db, x.result_id),
         }
         for x in db.scalars(query)
     ]
@@ -160,7 +169,11 @@ def decide_rank(
 def ranks(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
     ids = visible_athletes(db, actor)
     sports = [
-        {**row(r), "full_name": db.get(Athlete, r.athlete_id).user.full_name}
+        {
+            **row(r),
+            "full_name": db.get(Athlete, r.athlete_id).user.full_name,
+            "basis": result_basis(db, r.result_id),
+        }
         for r in db.scalars(select(SportsRank).where(SportsRank.athlete_id.in_(ids)))
     ]
     cats = select(JudgeCategory)

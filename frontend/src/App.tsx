@@ -36,7 +36,7 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { api, errorText, roleNames, sexNames } from "./lib";
+import { api, errorText, roleNames, sexNames, plain } from "./lib";
 import { useAuth, useData, useToast } from "./state";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
@@ -545,10 +545,10 @@ function Layout() {
             </Link>
             <Link to="/profile" className="topbar-user" aria-label="Открыть мой профиль" title="Мой профиль">
               <span className="avatar">
-                {auth.user.full_name.replace("Демо · ", "").slice(0, 1)}
+                {plain(auth.user.full_name).slice(0, 1)}
               </span>
               <div>
-                <strong>{auth.user.full_name.replace("Демо · ", "")}</strong>
+                <strong>{plain(auth.user.full_name)}</strong>
                 <small>{roleNames[auth.role]}</small>
               </div>
             </Link>

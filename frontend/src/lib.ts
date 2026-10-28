@@ -67,6 +67,41 @@ export const date = (s: string) =>
     ? s.slice(0, 10).split("-").reverse().join(".")
     : "—";
 export const today = () => new Date().toLocaleDateString("en-CA");
+// 1 место, 2 места, 5 мест
+export const plural = (n: number, one: string, few: string, many: string) =>
+  n % 10 === 1 && n % 100 !== 11
+    ? one
+    : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)
+      ? few
+      : many;
+export const years = (n: number) => n + " " + plural(n, "год", "года", "лет");
+export const count = (n: number, one: string, few: string, many: string) =>
+  n + " " + plural(n, one, few, many);
+// 1,2 instead of 1.2
+export const decimal = (n: number) => String(n).replace(".", ",");
+// Demo records carry a "Демо · " marker; the footer already says so.
+export const plain = (s: string) => s?.replace(/Демо\s*·\s*/gu, "");
+// Registration stores "Фамилия Имя Отчество", demo cards "Имя Фамилия".
+export const firstName = (fullName: string) => {
+  const parts = plain(fullName).trim().split(/\s+/u);
+  return (/^Демо\s*·/u.test(fullName) ? parts[0] : parts[1] || parts[0]) || "";
+};
+// Common Russian IANA zones; anything else is shown as is.
+export const timezones: Record<string, string> = {
+  "Europe/Kaliningrad": "Калининград (МСК−1)",
+  "Europe/Moscow": "Москва (МСК)",
+  "Europe/Samara": "Самара (МСК+1)",
+  "Asia/Yekaterinburg": "Оренбург, Екатеринбург (МСК+2)",
+  "Asia/Omsk": "Омск (МСК+3)",
+  "Asia/Novosibirsk": "Новосибирск (МСК+4)",
+  "Asia/Krasnoyarsk": "Красноярск (МСК+4)",
+  "Asia/Irkutsk": "Иркутск (МСК+5)",
+  "Asia/Yakutsk": "Якутск (МСК+6)",
+  "Asia/Vladivostok": "Владивосток (МСК+7)",
+  "Asia/Magadan": "Магадан (МСК+8)",
+  "Asia/Kamchatka": "Камчатка (МСК+9)",
+};
+export const timezoneLabel = (tz: string) => timezones[tz] || tz;
 export const roleNames: Record<string, string> = {
   admin: "Федерация",
   athlete: "Спортсмен",
@@ -151,7 +186,11 @@ export const ageRules: Record<string, string> = {
   start: "На дату старта",
 };
 export const ageRange = (min: number, max: number) =>
-  max >= 100 ? `от ${min} лет` : `${min}–${max} лет`;
+  max >= 100
+    ? min > 0
+      ? `от ${min} ${plural(min, "года", "лет", "лет")}`
+      : "Любой возраст"
+    : `${min}–${max} ${plural(max, "год", "года", "лет")}`;
 export const groupLabel = (g: any) =>
   `${g.name} · ${ageRange(g.min_age, g.max_age)}`;
 // Competition age limits: groups from the directory, or the plain age range.
@@ -161,14 +200,6 @@ export const ageLimits = (c: any) =>
     : ageRange(c.min_age, c.max_age);
 export function ageHint(check: any, self: boolean) {
   if (!check) return null;
-  const years = (n: number) =>
-    n +
-    " " +
-    (n % 10 === 1 && n % 100 !== 11
-      ? "год"
-      : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)
-        ? "года"
-        : "лет");
   const age = `На дату старта ${self ? "вам" : "спортсмену"} ${years(check.age)}, в году соревнований исполняется ${years(check.year_age)}.`;
   if (check.eligible)
     return {

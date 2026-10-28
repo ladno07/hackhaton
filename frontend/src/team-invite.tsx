@@ -4,6 +4,7 @@ import { useAuth, useAction, useData } from "./state";
 import { Button } from "./components/ui/button";
 import { Empty, Field, State } from "./components/shared";
 
+import { plain } from "./lib";
 export function TeamInvite({ team, comp }: any) {
   const { role } = useAuth();
   const action = useAction();
@@ -96,7 +97,7 @@ export function TeamInvite({ team, comp }: any) {
                 <option value="">Выберите спортсмена</option>
                 {choices.map((a: any) => (
                   <option key={a.id} value={a.id}>
-                    {a.full_name} · {a.public_id} · {a.organization} ·{" "}
+                    {plain(a.full_name)} · {a.public_id} · {plain(a.organization)} ·{" "}
                     {a.municipality}
                   </option>
                 ))}
@@ -123,9 +124,9 @@ export function TeamInvite({ team, comp }: any) {
       )}
       {selected && !query.error && (
         <div className="invite-card" aria-label="Получатель приглашения">
-          <Link className="text-link" to={`/athletes/${selected.id}/profile`}><strong>{selected.full_name}</strong></Link>
+          <Link className="text-link" to={`/athletes/${selected.id}/profile`}><strong>{plain(selected.full_name)}</strong></Link>
           <code>{selected.public_id}</code>
-          <span>Организация: {selected.organization}</span>
+          <span>Организация: {plain(selected.organization)}</span>
           <span>Муниципалитет: {selected.municipality}</span>
         </div>
       )}

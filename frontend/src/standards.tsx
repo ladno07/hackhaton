@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowRight, Dumbbell, Plus } from "lucide-react";
 import { useAction, useAuth, useData } from "./state";
-import { date, sexNames, today } from "./lib";
+import { date, sexNames, today, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import {
@@ -20,7 +20,6 @@ const stageShort: Record<string, string> = {
   ssm: "ССМ",
   vsm: "ВСМ",
 };
-const plain = (s: string) => s?.replace("Демо · ", "");
 const value = (v: number | null, unit: string) =>
   v == null ? "—" : `${v} ${unit}`;
 
@@ -803,8 +802,10 @@ export function Standards() {
         <p>
           Для перевода на этап нужно выполнить все его нормативы — общие для
           вида спорта и по дисциплинам, которыми занимается спортсмен, — с
-          порогами для его пола. Для этапов ССМ и ВСМ дополнительно нужен
-          разряд КМС и МС. Перевод оформляет федерация приказом.
+          порогами для его пола. Для перевода на этап совершенствования
+          спортивного мастерства дополнительно нужен разряд не ниже КМС, на
+          этап высшего спортивного мастерства — не ниже МС. Перевод оформляет
+          федерация приказом.
         </p>
       </div>
       <Dialog

@@ -11,7 +11,7 @@ import {
   Target,
   Trophy,
 } from "lucide-react";
-import { api, date, levels } from "./lib";
+import { api, date, levels, plain } from "./lib";
 import { useAuth, useData } from "./state";
 import { Button } from "./components/ui/button";
 import { FspLogo } from "./components/logo";
@@ -187,7 +187,7 @@ function DisciplinePath({ item, ladder, athleteId, self }: any) {
                   {g.achieved.map((a: any) => (
                     <div className="goal-result" key={a.result_id}>
                       <Link to={`/competitions/${a.competition_id}`}>
-                        {a.title}
+                        {plain(a.title)}
                       </Link>
                       <span>
                         {date(a.start_date)} · место {a.place} из{" "}
@@ -226,10 +226,10 @@ function DisciplinePath({ item, ladder, athleteId, self }: any) {
                 <div>
                   {e.competition_id ? (
                     <Link to={`/competitions/${e.competition_id}`}>
-                      {e.title}
+                      {plain(e.title)}
                     </Link>
                   ) : (
-                    <strong>{e.title}</strong>
+                    <strong>{plain(e.title)}</strong>
                   )}
                   {e.kind === "result" && <span>Место: {e.place}</span>}
                   {e.kind === "rank" && <span>Приказ {e.order_number}</span>}
@@ -255,7 +255,7 @@ function DisciplinePath({ item, ladder, athleteId, self }: any) {
               <tr key={c.id}>
                 <td>
                   <Link to={`/competitions/${c.id}`}>
-                    <strong>{c.title}</strong>
+                    <strong>{plain(c.title)}</strong>
                   </Link>
                 </td>
                 <td>{date(c.start_date)}</td>

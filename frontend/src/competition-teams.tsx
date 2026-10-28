@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useAuth, useAction, useData } from "./state";
-import { today } from "./lib";
+import { today, plain } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { Empty, Field, State, Table } from "./components/shared";
@@ -61,7 +61,7 @@ function TeamCard({ team, comp }: any) {
                 className="text-link"
                 to={`/athletes/${m.athlete_id}/profile`}
               >
-                {m.full_name}
+                {plain(m.full_name)}
               </Link>
               <small>{m.public_id}</small>
               {m.athlete_id === team.captain_id && <small>Капитан</small>}
@@ -153,7 +153,7 @@ function TeamCard({ team, comp }: any) {
               >
                 {team.members.map((m: any) => (
                   <option key={m.id} value={m.athlete_id}>
-                    {m.full_name} · {m.public_id}
+                    {plain(m.full_name)} · {m.public_id}
                   </option>
                 ))}
               </select>
@@ -340,7 +340,7 @@ export function CompetitionTeams({ comp }: any) {
                 <option value="">Выберите капитана</option>
                 {wards.data?.map((a: any) => (
                   <option key={a.id} value={a.id}>
-                    {a.full_name} · {a.public_id} · {a.organization} ·{" "}
+                    {plain(a.full_name)} · {a.public_id} · {plain(a.organization)} ·{" "}
                     {a.municipality}
                   </option>
                 ))}

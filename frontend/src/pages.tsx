@@ -26,7 +26,7 @@ import {
   YAxis,
 } from "recharts";
 import { useAction, useAuth, useData, useToast } from "./state";
-import { chartColors, date, download, formats, roleNames, sexNames, today, trainingStages } from "./lib";
+import { chartColors, date, download, formats, roleNames, sexNames, today, trainingStages, plain, firstName } from "./lib";
 import { Button } from "./components/ui/button";
 import { Dialog } from "./components/ui/dialog";
 import { StaffEditor, staffKinds } from "./staff";
@@ -101,7 +101,7 @@ function AttentionPanel() {
                     />
                     <div>
                       <h3>
-                        {i.title.replace("Демо · ", "")} · {i.detail}
+                        {plain(i.title)} · {i.detail}
                       </h3>
                       <p>
                         {i.overdue ? "просрочено · " : i.date_label + " "}
@@ -151,7 +151,7 @@ export function Overview() {
       <PageTitle
         eyebrow={`${roleNames[role].toUpperCase()} / ЛИЧНЫЙ КАБИНЕТ`}
         title="Всё начинается с кода"
-        description={`Здравствуйте, ${user.full_name.replace("Демо · ", "").split(" ")[0]}. Вот что происходит в вашем спортивном сезоне.`}
+        description={`Здравствуйте, ${firstName(user.full_name)}. Вот что происходит в вашем спортивном сезоне.`}
       >
         <Link className="btn btn-outline" to="/competitions">
           <CalendarDays size={16} />
@@ -199,17 +199,27 @@ export function Overview() {
               role === "coach"
                 ? "Мои спортсмены"
                 : role === "athlete"
-                  ? "Мой профиль"
+                  ? "Мои результаты"
                   : role === "judge"
                     ? "Назначения"
                     : "Спортсмены"
             }
-            value={role === "judge" ? s?.assignments : s?.athletes}
+            value={
+              role === "judge"
+                ? s?.assignments
+                : role === "athlete"
+                  ? s?.results
+                  : s?.athletes
+            }
             icon={Users}
             note={
               role === "admin" || role === "ministry"
                 ? "в едином реестре"
-                : "в пределах вашего кабинета"
+                : role === "athlete"
+                  ? "в опубликованных протоколах"
+                  : role === "judge"
+                    ? "предстоящие и текущие"
+                    : "с активной связью"
             }
           />
           <Stat
@@ -219,10 +229,10 @@ export function Overview() {
             note="в календаре федерации"
           />
           <Stat
-            label="Заявки на рассмотрении"
-            value={s?.applications}
+            label={role === "judge" ? "Заявки на категорию" : "Заявки на рассмотрении"}
+            value={role === "judge" ? s?.rank_applications : s?.applications}
             icon={FileCheck2}
-            note="требуют внимания"
+            note={role === "admin" ? "требуют решения" : "ожидают решения федерации"}
           />
           <Stat
             label={
@@ -258,7 +268,7 @@ export function Overview() {
                   </div>
                   <div className="upcoming-copy">
                     <small>{c.discipline}</small>
-                    <h3>{c.title.replace("Демо · ", "")}</h3>
+                    <h3>{plain(c.title)}</h3>
                     <p>
                       {c.location} <i /> {formats[c.format]}
                     </p>
@@ -292,7 +302,7 @@ export function Overview() {
                       className={"deadline-dot " + (i === 0 ? "urgent" : "")}
                     />
                     <div>
-                      <h3>{d.title.replace("Демо · ", "")}</h3>
+                      <h3>{plain(d.title)}</h3>
                       <p>{date(d.due_on)}</p>
                     </div>
                   </div>
@@ -454,9 +464,9 @@ export function History() {
                         className="text-link"
                         to={`/athletes/${r.athlete_id}/profile`}
                       >
-                        <strong>{r.full_name}</strong>
+                        <strong>{plain(r.full_name)}</strong>
                       </Link>
-                      <small>{r.title}</small>
+                      <small>{plain(r.title)}</small>
                     </td>
                     <td>{date(r.start_date)}</td>
                     <td>
@@ -521,7 +531,7 @@ export function History() {
           </div>
           {a.data?.map((x: any) => (
             <div className="simple-row" key={x.id}>
-              <span>{x.full_name}</span>
+              <span>{plain(x.full_name)}</span>
               <ExportButtons
                 base={"/exports/athlete/" + x.id}
                 name={"athlete-" + x.id}
@@ -622,7 +632,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
             <option value="">Без организации</option>
             {meta.data?.organizations.map((o: any) => (
               <option key={o.id} value={o.id}>
-                {o.name}
+                {plain(o.name)}
               </option>
             ))}
           </select>
@@ -647,7 +657,7 @@ export function ProfileEditor({ athlete, onSaved }: any) {
           <h3>История организаций</h3>
           {history.map((p: any) => (
             <div className="simple-row" key={p.id}>
-              <span>{p.organization}</span>
+              <span>{plain(p.organization)}</span>
               <small>
                 {date(p.start_date)} —{" "}
                 {p.end_date ? date(p.end_date) : "по н. в."}
@@ -942,7 +952,7 @@ export function Coaching() {
                       className="text-link"
                       to={`/athletes/${l.athlete_id}/profile`}
                     >
-                      <strong>{l.athlete}</strong>
+                      <strong>{plain(l.athlete)}</strong>
                     </Link>
                     <small>{l.athlete_public_id}</small>
                     <details>
@@ -1072,7 +1082,7 @@ export function Coaching() {
               <option value="">Выберите спортсмена</option>
               {athletes.data?.map((a: any) => (
                 <option key={a.id} value={a.id}>
-                  {a.full_name} · {a.municipality}
+                  {plain(a.full_name)} · {a.municipality}
                 </option>
               ))}
             </select>
@@ -1120,7 +1130,7 @@ export function Notifications() {
                   <Bell size={18} />
                 </div>
                 <div>
-                  <h3>{n.title}</h3>
+                  <h3>{plain(n.title)}</h3>
                   <p>{n.body}</p>
                   {n.event_key.startsWith("competition-team:") && (
                     <Link
@@ -1171,7 +1181,7 @@ export function Deadlines() {
     <section className="panel panel-padding"><State query={query}>
       {query.data?.length ? <Table heads={["Событие", "Срок", "Подробнее"]}>
         {query.data.map((item: any) => <tr key={`${item.kind}:${item.id}`}>
-          <td>{item.title}</td><td>{date(item.due_on)}</td>
+          <td>{plain(item.title)}</td><td>{date(item.due_on)}</td>
           <td><Link to={item.kind === "competition" ? `/competitions/${item.id}` : ["rank", "category"].includes(item.kind) ? "/ranks" : "/settings"}>Открыть</Link></td>
         </tr>)}
       </Table> : <Empty text="Предстоящих сроков пока нет" />}
@@ -1205,7 +1215,7 @@ export function Audit() {
                 .map((x: any) => (
                   <tr key={x.id}>
                     <td>{date(x.created_at)} {new Date(x.created_at).toLocaleTimeString("ru-RU")}</td>
-                    <td>{x.full_name}</td>
+                    <td>{plain(x.full_name)}</td>
                     <td>{roleNames[x.active_role]}</td>
                     <td>
                       <strong>{x.action}</strong>

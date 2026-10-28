@@ -33,7 +33,12 @@ import {
   formats,
   groupLabel,
   levels,
+  count,
+  plain,
+  plural,
   statuses,
+  timezoneLabel,
+  timezones,
   today,
 } from "./lib";
 import { Button } from "./components/ui/button";
@@ -161,7 +166,7 @@ export function AgeHint({ check, self }: any) {
   if (!hint) return null;
   return (
     <div className={"age-hint" + (hint.ok ? "" : " age-hint-no")} role="status">
-      <strong>{hint.title}</strong>
+      <strong>{plain(hint.title)}</strong>
       {hint.text}
       {self && check.reason === "sex_missing" && (
         <>
@@ -342,7 +347,9 @@ export function CompetitionForm({ initial, onSaved }: any) {
       </div>
       <div className="form-grid">
         {field("start_time", "Время начала (необязательно)", "time", { required: false })}
-        {field("timezone", "Часовой пояс IANA")}
+        <Field label="Часовой пояс">
+          <TimezoneSelect value={v.timezone} onChange={(tz: string) => set("timezone", tz)} />
+        </Field>
       </div>
       <div className="form-grid">
         {field("deadline", "Заявки до", "date")}
@@ -495,7 +502,8 @@ export function Competitions() {
       <div className="competition-summary">
         <span>
           <CalendarDays size={18} />
-          <strong>{query.data?.length || 0}</strong> событий в календаре
+          <strong>{query.data?.length || 0}</strong>{" "}
+          {plural(query.data?.length || 0, "событие", "события", "событий")} в календаре
         </span>
         <span>
           <i className="green-dot" /> Все шесть дисциплин спортивного
@@ -563,7 +571,7 @@ export function Competitions() {
                       <span>{statuses[c.status]}</span>
                       <span>{c.type}</span>
                     </div>
-                    <h2>{c.title.replace("Демо · ", "")}</h2>
+                    <h2>{plain(c.title)}</h2>
                     <div className="competition-meta">
                       <span>
                         <MapPin size={14} />
@@ -591,8 +599,8 @@ export function Competitions() {
                     <Badge value={c.state} />
                     <small>
                       {c.state === "open"
-                        ? "До " + date(c.deadline)
-                        : c.participants + " участников"}
+                        ? "Заявки до " + date(c.deadline)
+                        : count(c.participants, "участник", "участника", "участников")}
                     </small>
                     <span className="event-open">
                       Подробнее <ArrowRight size={16} />
@@ -693,7 +701,7 @@ function IndividualResultsEditor({ comp, correction, onDone }: any) {
                 className="text-link"
                 to={`/athletes/${r.athlete_id}/profile`}
               >
-                {r.full_name}
+                {plain(r.full_name)}
               </Link>
             </td>
             <td>
@@ -797,7 +805,7 @@ function ProtocolHistory({ id }: any) {
                 <ul>
                   {v.changes.map((c: any) => (
                     <li key={c.result_id}>
-                      {c.full_name}: {changeText(c)}
+                      {plain(c.full_name)}: {changeText(c)}
                     </li>
                   ))}
                 </ul>
@@ -815,6 +823,14 @@ function ProtocolHistory({ id }: any) {
     </State>
   );
 }
+function TimezoneSelect({ value, onChange }: any) {
+  const zones = value && !timezones[value] ? [value, ...Object.keys(timezones)] : Object.keys(timezones);
+  return (
+    <select required value={value} onChange={(e) => onChange(e.target.value)}>
+      {zones.map((tz) => <option key={tz} value={tz}>{timezoneLabel(tz)}</option>)}
+    </select>
+  );
+}
 function ScheduleForm({ comp, onSaved }: any) {
   const action = useAction();
   const [values, setValues] = useState({ start_date: comp.start_date, end_date: comp.end_date,
@@ -824,9 +840,12 @@ function ScheduleForm({ comp, onSaved }: any) {
       data: { ...values, start_time: values.start_time || null } }); onSaved(); }}>
     <p>Допущенные участники, их тренеры и судьи получат уведомление о переносе.</p>
     {([ ["start_date", "Дата начала", "date"], ["end_date", "Дата окончания", "date"],
-      ["start_time", "Время начала (необязательно)", "time"], ["timezone", "Часовой пояс IANA", "text"] ] as const).map(([key, label, type]) =>
+      ["start_time", "Время начала (необязательно)", "time"] ] as const).map(([key, label, type]) =>
       <Field key={key} label={label}><input type={type} required={key !== "start_time"} value={values[key]}
         onChange={e => setValues({ ...values, [key]: e.target.value })} /></Field>)}
+    <Field label="Часовой пояс">
+      <TimezoneSelect value={values.timezone} onChange={(tz: string) => setValues({ ...values, timezone: tz })} />
+    </Field>
     <Button disabled={action.isPending}>Сохранить расписание</Button>
   </form>;
 }
@@ -885,8 +904,8 @@ export function CompetitionDetail() {
           <>
             <PageTitle
               eyebrow={comp.discipline?.toUpperCase()}
-              title={comp.title.replace("Демо · ", "")}
-              description={`${date(comp.start_date)} — ${date(comp.end_date)} · ${comp.start_time ? comp.start_time.slice(0, 5) : "Время уточняется"} (${comp.timezone}) · ${comp.location}`}
+              title={plain(comp.title)}
+              description={`${date(comp.start_date)} — ${date(comp.end_date)} · ${comp.start_time ? `${comp.start_time.slice(0, 5)} (${timezoneLabel(comp.timezone)})` : "время начала уточняется"} · ${comp.location}`}
             >
               <Badge value={comp.state} />
               {role === "admin" && ["open", "closed"].includes(comp.state) && <Button variant="outline"
@@ -1044,7 +1063,7 @@ export function CompetitionDetail() {
                           <option value="">Выберите подопечного</option>
                           {athletes.data?.map((a: any) => (
                             <option key={a.id} value={a.id}>
-                              {a.full_name}
+                              {plain(a.full_name)}
                             </option>
                           ))}
                         </select>
@@ -1123,7 +1142,7 @@ export function CompetitionDetail() {
                             className="text-link"
                             to={`/athletes/${a.athlete_id}/profile`}
                           >
-                            <strong>{a.full_name}</strong>
+                            <strong>{plain(a.full_name)}</strong>
                           </Link>
                         </td>
                         <td>{a.age_group || "—"}</td>
@@ -1253,7 +1272,7 @@ export function CompetitionDetail() {
                               className="text-link"
                               to={`/athletes/${r.athlete_id}/profile`}
                             >
-                              {r.full_name}
+                              {plain(r.full_name)}
                             </Link>
                           </td>
                           <td>{r.score}</td>
@@ -1301,7 +1320,7 @@ export function CompetitionDetail() {
                           <option value="">Выберите судью</option>
                           {judges.data?.map((j: any) => (
                             <option value={j.id} key={j.id}>
-                              {j.full_name}
+                              {plain(j.full_name)}
                             </option>
                           ))}
                         </select>
@@ -1333,7 +1352,7 @@ export function CompetitionDetail() {
                     <Table heads={["Судья", "Должность"]}>
                       {comp.judges.map((j: any) => (
                         <tr key={j.judge_id}>
-                          <td>{j.full_name}</td>
+                          <td>{plain(j.full_name)}</td>
                           <td>{j.position}</td>
                         </tr>
                       ))}
