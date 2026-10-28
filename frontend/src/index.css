@@ -3542,3 +3542,100 @@ td a:hover {
   flex: 0 1 220px;
   max-width: 220px;
 }
+.integration-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.integration-tags span,
+.integration-docs code,
+.integration-checks code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  background: var(--fsp-neutral-50);
+  border: 1px solid var(--fsp-neutral-100);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.integration-checks {
+  flex-direction: column;
+  gap: 8px;
+}
+.field .integration-checks input[type="checkbox"] {
+  width: auto;
+  flex: none;
+}
+.integration-checks .check-line > span {
+  font-weight: 400;
+}
+.integration-url {
+  overflow-wrap: anywhere;
+}
+.integration-secret-value {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.integration-secret-value input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.integration-deliveries {
+  display: grid;
+  gap: 8px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.integration-deliveries details {
+  border: 1px solid var(--fsp-neutral-100);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.integration-deliveries summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12px;
+}
+.integration-deliveries summary small {
+  color: var(--fsp-neutral-400);
+}
+.integration-deliveries pre,
+.integration-docs pre {
+  font-size: 11px;
+  line-height: 1.6;
+  background: var(--fsp-neutral-50);
+  border: 1px solid var(--fsp-neutral-100);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin: 10px 0;
+  overflow: auto;
+  white-space: pre;
+}
+.integration-docs {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fsp-neutral-600);
+}
+.integration-docs h3 {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--fsp-neutral-900);
+  margin: 22px 0 6px;
+}
+.integration-docs a {
+  color: var(--fsp-primary-600, #402fff);
+}
+.integration-docs .table-scroll {
+  margin: 12px 0;
+}
+@media (max-width: 760px) {
+  .integration-secret-value {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

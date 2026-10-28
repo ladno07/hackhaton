@@ -23,6 +23,7 @@ from app.services.competition_teams import (
 from app.services.notifications import notify, admins
 from app.services.athlete_ids import public_athlete_id, parse_athlete_id, candidate_view
 from app.routers.competitions import locked
+from app.services import integrations
 
 router = APIRouter(tags=["Команды соревнований"])
 
@@ -447,6 +448,7 @@ def review(
         )
     if data.status == "returned" and len(data.comment.strip()) < 5:
         raise HTTPException(422, "Укажите причину возврата (не менее 5 символов)")
+    approved = []
     if data.status == "approved":
         for member in check_roster(db, comp, team):
             _, check = check_athlete(db, comp, member.athlete_id)
@@ -464,8 +466,12 @@ def review(
                 )
                 db.add(obj)
             obj.status, obj.comment = "approved", "Допущена команда «" + team.name + "»"
+            obj.approved_at = now()
             obj.age_group_id = check["groups"][0]["id"] if check["groups"] else None
+            approved.append(obj)
     team.status, team.comment = data.status, data.comment
+    for obj in approved:
+        integrations.application_approved(db, obj, comp)
     event(db, actor, team, "Решение по командной заявке", data.model_dump())
     return view(db, actor, team)
 
