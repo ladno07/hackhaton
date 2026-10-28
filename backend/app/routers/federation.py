@@ -192,7 +192,7 @@ def ranks(actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
 
 @router.get("/ratings")
 def ratings(
-    season: int = Query(date.today().year, ge=2000, le=2100),
+    season: int | None = Query(None, ge=2000, le=2100),
     discipline_id: int | None = None,
     min_age: int = 0,
     max_age: int = 100,
@@ -200,6 +200,7 @@ def ratings(
     actor: Actor = Depends(current_actor),
     db: Session = Depends(get_db),
 ):
+    season = season or date.today().year
     if min_rank and min_rank not in RANKS:
         raise HTTPException(422, "Неизвестный разряд")
     return ranking(db, season, discipline_id, min_age, max_age, min_rank)
@@ -232,11 +233,12 @@ def edit_rules(
 
 @router.get("/team")
 def team(
-    season: int = date.today().year,
+    season: int | None = None,
     discipline_id: int | None = None,
     actor: Actor = Depends(current_actor),
     db: Session = Depends(get_db),
 ):
+    season = season or date.today().year
     query = select(TeamMember).where(TeamMember.season == season)
     if discipline_id:
         query = query.where(TeamMember.discipline_id == discipline_id)

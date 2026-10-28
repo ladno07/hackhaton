@@ -299,10 +299,23 @@ def request_link(
     require(db, Discipline, data.discipline_id)
     if not db.get(AthleteDiscipline, (athlete.id, data.discipline_id)):
         raise HTTPException(422, "Спортсмен не занимается выбранной дисциплиной")
-    link = AthleteCoach(
-        athlete_id=athlete.id, coach_id=coach.id, discipline_id=data.discipline_id
+    link = db.scalar(
+        select(AthleteCoach).where(
+            AthleteCoach.athlete_id == athlete.id,
+            AthleteCoach.coach_id == coach.id,
+            AthleteCoach.discipline_id == data.discipline_id,
+        )
     )
-    db.add(link)
+    if link and link.status != "ended":
+        raise HTTPException(409, "Связь по этой дисциплине уже есть")
+    # an ended link is requested again: the row is unique, its history continues
+    if link:
+        link.status = "pending"
+    else:
+        link = AthleteCoach(
+            athlete_id=athlete.id, coach_id=coach.id, discipline_id=data.discipline_id
+        )
+        db.add(link)
     audit(db, actor, "Запрос связи с тренером", link)
     db.add(LinkHistory(link_id=link.id, actor_id=actor.user.id, status="pending"))
     notify(
@@ -310,7 +323,7 @@ def request_link(
         [athlete.user_id],
         "Запрос от тренера",
         coach.user.full_name,
-        f"link:{link.id}",
+        f"link:{link.id}:{now().isoformat()}",
     )
     return row(link)
 
