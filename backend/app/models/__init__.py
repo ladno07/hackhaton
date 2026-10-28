@@ -913,7 +913,9 @@ class WebhookDelivery(Base):
 
 class AthletePlatformLogin(Base):
     """Login of an athlete on a testing system; results of a contest there
-    are matched to athletes by it. login_key is the case-folded login."""
+    are matched to athletes by it. login_key is the case-folded login.
+    A login the athlete entered is unconfirmed until the federation binds it:
+    nobody checks it belongs to them."""
 
     __tablename__ = "athlete_platform_logins"
     __table_args__ = (
@@ -930,3 +932,6 @@ class AthletePlatformLogin(Base):
     platform: Mapped[str] = mapped_column(String(20))
     login: Mapped[str] = mapped_column(String(100))
     login_key: Mapped[str] = mapped_column(String(100))
+    confirmed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )

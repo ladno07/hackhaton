@@ -204,6 +204,26 @@ function PlatformImportForm({ comp, onDone }: any) {
               ))}
             </div>
           )}
+          {report.unconfirmed?.length > 0 && (
+            <div className="form-section">
+              <h3>Логины не подтверждены</h3>
+              <p className="inline-note">
+                Спортсмены указали эти логины в профиле сами. Подтвердите, что логин принадлежит
+                спортсмену, — привязка сохранится при публикации. Если логин чужой, удалите его в
+                профиле спортсмена и повторите проверку.
+              </p>
+              {report.unconfirmed.map((u: any) => (
+                <div className="simple-row" key={u.login}>
+                  <span>
+                    {u.login} → {plain(u.full_name)} <small>{u.athlete_id}</small>
+                  </span>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => bind(u.login, String(u.id))}>
+                    Подтвердить
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
           {report.missing.length > 0 && (
             <div className="form-section">
               <h3>Не войдут в протокол</h3>

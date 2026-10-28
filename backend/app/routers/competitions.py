@@ -180,6 +180,20 @@ def remove(
     if obj.state != "draft":
         raise HTTPException(409, "Удалить можно только черновик")
     audit(db, actor, "Удаление соревнования", obj)
+    # judges may be assigned to a draft: their seats go with it
+    for seat in db.scalars(
+        select(CompetitionJudge).where(CompetitionJudge.competition_id == obj.id)
+    ):
+        judge = db.get(Judge, seat.judge_id)
+        notify(
+            db,
+            [judge.user_id],
+            "Назначение на соревнование отменено",
+            f"{obj.title}: {seat.position}. Соревнование удалено",
+            f"judge-removed:{obj.id}:{judge.id}:{now().isoformat()}",
+        )
+        db.delete(seat)
+    db.flush()
     db.delete(obj)
 
 

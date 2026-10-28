@@ -135,7 +135,7 @@ def test_merged_migration_upgrade(tmp_path, source):
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalars().all() == ["0020"]
+        ).scalars().all() == ["0021"]
         tables = set(inspect(conn).get_table_names())
         assert {
             "athlete_organizations",

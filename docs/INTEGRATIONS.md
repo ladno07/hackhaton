@@ -149,6 +149,16 @@ FSP-000002;2;80
   спортсмен и федерация). Один логин на площадке принадлежит одному
   спортсмену (409 при повторе); регистр не важен. Логины видны спортсмену,
   федерации и его тренерам, но не Минспорту и не в публичном профиле.
+- **Подтверждение.** Никто не проверяет, что логин, указанный спортсменом,
+  принадлежит ему, поэтому такой логин считается неподтверждённым (в профиле
+  есть пометка). Строка таблицы, найденная по неподтверждённому логину,
+  не даёт опубликовать протокол: в предпросмотре блок «Логины не
+  подтверждены» с кнопкой «Подтвердить» (ручная привязка). Если логин чужой,
+  федерация удаляет его в профиле или привязывает строку к настоящему
+  владельцу — неподтверждённый логин при этом переходит к нему. Логин,
+  введённый федерацией или привязанный при импорте, подтверждён; новое
+  значение от спортсмена снова требует подтверждения. Логины, сохранённые до
+  миграции `0021`, считаются подтверждёнными.
 - **Сопоставление.** Строка таблицы → спортсмен по логину из профиля, иначе
   по логину или имени вида `FSP-000123`. Посторонние участники открытого
   контеста — не ошибка: они показаны в блоке «Не вошли в протокол» с причиной.
@@ -190,6 +200,6 @@ FSP-000002;2;80
 | Права токенов, outbox, подпись, отправка, разбор CSV | [backend/app/services/integrations.py](../backend/app/services/integrations.py) |
 | Управление и API `/api/v1` | [backend/app/routers/integrations.py](../backend/app/routers/integrations.py) |
 | Точки генерации событий | `set_state`, `moderate`, `publish_results`, `apply_correction` в [competitions.py](../backend/app/routers/competitions.py); `review` в [competition_teams.py](../backend/app/routers/competition_teams.py) |
-| Адаптеры площадок, сопоставление логинов, пересчёт мест | [backend/app/services/platforms.py](../backend/app/services/platforms.py); модель `AthletePlatformLogin`, миграция `0020_platform_logins`; эндпоинт `POST /api/competitions/{id}/results/platform` |
+| Адаптеры площадок, сопоставление логинов, пересчёт мест | [backend/app/services/platforms.py](../backend/app/services/platforms.py); модель `AthletePlatformLogin`, миграции `0020_platform_logins`, `0021_confirmed_platform_logins`; эндпоинт `POST /api/competitions/{id}/results/platform` |
 | Интерфейс | [frontend/src/integrations.tsx](../frontend/src/integrations.tsx), диалог «Загрузить из…» — [frontend/src/platform-import.tsx](../frontend/src/platform-import.tsx) |
 | Тесты | [backend/tests/test_integrations.py](../backend/tests/test_integrations.py), [backend/tests/test_platform_import.py](../backend/tests/test_platform_import.py) |

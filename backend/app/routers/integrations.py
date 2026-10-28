@@ -310,6 +310,7 @@ def import_platform(
         "unmatched": found.unmatched,
         "missing": found.missing,
         "conflicts": found.conflicts,
+        "unconfirmed": found.unconfirmed,
     }
     if not found.ready:
         if not data.dry_run:
@@ -322,7 +323,7 @@ def import_platform(
     result = import_results(db, actor, comp, found.rows, data.reason, data.dry_run, partial=True)
     if not data.dry_run:
         for login, athlete_id in found.bound.items():
-            platforms.save_login(db, athlete_id, data.platform, login)
+            platforms.save_login(db, athlete_id, data.platform, login, confirmed=True)
         comp.results_source = source
         audit(db, actor, "Импорт результатов с площадки", comp,
               {"platform": data.platform, "contest": source["contest"], "count": result["count"],
